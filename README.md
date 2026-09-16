@@ -15,7 +15,13 @@ Keystone (app)  (SwiftUI) — MenuBarExtra · Bảng điều khiển · Gõ tắ
 ```
 
 ## Trạng thái
-Giai đoạn thiết kế xong (spec + danh mục lỗi + concept icon). Chưa viết code triển khai — bắt đầu ở **Phase 1** (engine + bộ test). Xem `HANDOFF.md`.
+- ✅ **Thiết kế:** spec + danh mục lỗi + icon đã chốt.
+- ✅ **Phase 1 — Engine + bộ test (XONG):** `KeystoneEngine` (Swift thuần) — Telex, Unicode NFC, đặt dấu kiểu mới/cũ, `Syllable` fold, restore-if-invalid, backspace khôi phục dấu. Bộ test Swift Testing **xanh**: 153 ca corpus (8 nhóm) + 12 ca property. Chạy: `swift test`. Quyết định engine ghi ở [`DECISIONS.md`](DECISIONS.md); CI ở [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+- ⬜ **Tiếp theo — Phase 2:** tầng nhập `KeystoneInput` (CGEventTap + re-enable + watchdog + cache) + menu-bar tối thiểu. Xem `HANDOFF.md`.
+
+```
+swift build && swift test   # engine phải luôn xanh
+```
 
 ## Bản quyền
 Engine viết mới từ đầu (clean-room), **không** dùng mã của OpenKey (GPLv3). Bản quyền thuộc tác giả; giấy phép tuỳ chọn.

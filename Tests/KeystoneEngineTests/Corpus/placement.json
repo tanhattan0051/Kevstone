@@ -1,0 +1,21 @@
+[
+  { "name": "hoa modern", "keys": "hoaf", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "hòa" },
+  { "name": "hoa classic", "keys": "hoaf", "method": "telex", "orthography": "classic", "restoreIfInvalid": true, "expected": "hoà" },
+  { "name": "khoe modern", "keys": "khoer", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "khỏe" },
+  { "name": "khoe classic", "keys": "khoer", "method": "telex", "orthography": "classic", "restoreIfInvalid": true, "expected": "khoẻ" },
+  { "name": "thuy modern", "keys": "thuyr", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "thủy" },
+  { "name": "thuy classic", "keys": "thuyr", "method": "telex", "orthography": "classic", "restoreIfInvalid": true, "expected": "thuỷ" },
+  { "name": "toan closed", "keys": "toans", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "toán" },
+  { "name": "tuan circumflex wins", "keys": "tuaanf", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "tuần" },
+  { "name": "tieng e-circumflex", "keys": "tieengs", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "tiếng" },
+  { "name": "muon o-circumflex", "keys": "muoons", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "muốn" },
+  { "name": "duoc horn wins", "keys": "dduowcj", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "được" },
+  { "name": "cua falling first", "keys": "cuar", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "của" },
+  { "name": "mia falling first", "keys": "mias", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "mía" },
+  { "name": "qua fold", "keys": "quar", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "quả" },
+  { "name": "giay gi-fold", "keys": "giayf", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "giày" },
+  { "name": "khuyu triphthong middle", "keys": "khuyur", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "khuỷu" },
+  { "name": "nguyen e-circumflex", "keys": "nguyeexn", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "nguyễn" },
+  { "name": "hoang closed last", "keys": "hoangf", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "hoàng" },
+  { "name": "quoc fold o-circumflex", "keys": "quoocs", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "quốc" }
+]

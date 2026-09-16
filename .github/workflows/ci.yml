@@ -1,0 +1,18 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  engine-tests:
+    name: KeystoneEngine corpus
+    runs-on: macos-15   # needs Swift 6 (Swift Testing is bundled with the toolchain)
+    steps:
+      - uses: actions/checkout@v4
+      - name: Show Swift version
+        run: swift --version
+      - name: Build
+        run: swift build
+      - name: Test (engine corpus + property tests)
+        run: swift test

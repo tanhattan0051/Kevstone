@@ -1,0 +1,22 @@
+[
+  { "name": "viet nam with space+case", "keys": "Vieejt Nam", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "Việt Nam" },
+  { "name": "toi", "keys": "tooi", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "tôi" },
+  { "name": "yeu", "keys": "yeeu", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "yêu" },
+  { "name": "nguoi", "keys": "nguowif", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "người" },
+  { "name": "cam on", "keys": "camr own", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "cảm ơn" },
+  { "name": "hoc", "keys": "hocj", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "học" },
+  { "name": "truong", "keys": "truowngf", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "trường" },
+  { "name": "pho", "keys": "phowr", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "phở" },
+  { "name": "ca phe", "keys": "caf phee", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "cà phê" },
+  { "name": "dep", "keys": "ddepj", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "đẹp" },
+  { "name": "nuoc", "keys": "nuowcs", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "nước" },
+  { "name": "mot", "keys": "mootj", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "một" },
+  { "name": "gia dinh", "keys": "gia ddinhf", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "gia đình" },
+  { "name": "anh", "keys": "anh", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "anh" },
+  { "name": "em", "keys": "em", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "em" },
+  { "name": "hai", "keys": "hai", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "hai" },
+  { "name": "ba", "keys": "ba", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "ba" },
+  { "name": "que huong", "keys": "quee huowng", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "quê hương" },
+  { "name": "sinh vien", "keys": "sinh vieen", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "sinh viên" },
+  { "name": "banh mi", "keys": "banhs mif", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "bánh mì" }
+]

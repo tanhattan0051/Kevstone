@@ -1,0 +1,14 @@
+[
+  { "name": "gi -> gì (unfolded g+i onset)", "keys": "gif", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "gì" },
+  { "name": "gin -> gìn", "keys": "ginf", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "gìn" },
+  { "name": "gi hoi -> gỉ", "keys": "gir", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "gỉ" },
+  { "name": "gieng -> giếng (folded gi onset, control)", "keys": "gieengs", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "giếng" },
+  { "name": "quow -> quơ (qu-glide, horn only o)", "keys": "quow", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "quơ" },
+  { "name": "quowr -> quở", "keys": "quowr", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "quở" },
+  { "name": "thu[r -> thuở (uơ via direct key)", "keys": "thu[r", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "thuở" },
+  { "name": "hu[ -> huơ (uơ via direct key)", "keys": "hu[", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "huơ" },
+  { "name": "nuowc still makes ươ (no regression)", "keys": "nuowcs", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "nước" },
+  { "name": "english coins protected (offglide+coda invalid rime)", "keys": "coins", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "coins" },
+  { "name": "english ruins protected", "keys": "ruins", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "ruins" },
+  { "name": "loans stays Vietnamese (oan is a real rime)", "keys": "loans", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "loán" }
+]

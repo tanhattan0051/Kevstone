@@ -38,8 +38,11 @@ Mã nguồn OpenKey để tham chiếu (đọc để hiểu lỗi, KHÔNG chép)
 - Muốn tinh chỉnh thêm (màu/độ dày nét/bo góc) cứ bảo mình.
 
 ## Việc tiếp theo (lộ trình — chi tiết ở Phần D của spec)
-- **Phase 1 (bắt đầu ở đây):** module `KeystoneEngine` (Swift, thuần) + **bộ test corpus** — Telex + Unicode NFC + đặt dấu kiểu mới. Bắt đầu từ `Syllable` (Phần A §1) và thuật toán đặt dấu (Phần A §4). Viết test trước (TDD); lấy các từ trong Phần E (`chưa`+`a`, `hồng`, `huơ`, `nẽt`, `huỵch`…) làm ca test bắt buộc.
-- **Phase 2:** `KeystoneInput` (CGEventTap + re-enable + watchdog + cache) + menu-bar tối thiểu → **kiểm các mục [VERIFY]** trên máy thật.
+- ✅ **Phase 1 — XONG:** module `KeystoneEngine` (Swift thuần) + **bộ test corpus**. Đã có: Telex đầy đủ, Unicode NFC, đặt dấu kiểu mới **và** cũ (Phần A §4), `Syllable` fold (re-derive mỗi phím), restore-if-invalid 2 lớp, backspace khôi phục dấu (Phần A §8). Test Swift Testing **xanh**: 153 ca corpus + 12 property. Các quyết định engine (bao gồm giải Open Questions) ghi ở `DECISIONS.md`. CI: `.github/workflows/ci.yml`.
+  - Cấu trúc: `Sources/KeystoneEngine/{Model,NFC,TonePlacement,Phonology,Telex,Engine}.swift`; test + corpus JSON ở `Tests/KeystoneEngineTests/`.
+  - Đã diệt tại engine (có regression test): E.5 (hoa/thường theo cấu trúc, `VIEEJT`→`VIỆT`), E.6 (`chưa`+`a`→`chưaa` không ép `chưâ`; `hồng` không `hoồng`; `huơ`/`khuơ`/`thuở` gõ được qua phím `[`; `gì`/`gìn`), và bảo vệ từ tiếng Anh (`wrong`,`coins`,`ruins`…).
+  - Còn nợ (Phase 3): bảng rime §5.3 mới ở mức luật offglide (đủ cho v1, nên nâng thành bảng đầy đủ sau); VNI/Simple/Quick Telex; 4 bảng mã cũ (TCVN3/VNI-Win/tổ hợp/CP1258).
+- **Phase 2 (bắt đầu ở đây):** `KeystoneInput` (CGEventTap + re-enable + watchdog + cache) + menu-bar tối thiểu → **kiểm các mục [VERIFY]** trên máy thật. Engine đã thuần & test kỹ nên tầng nhập chỉ cần *thực thi* `EngineResult` (xoá N + gõ chuỗi).
 - **Phase 3:** VNI, Simple Telex 1/2, Quick Telex + đủ 5 bảng mã.
 - **Phase 4:** gõ tắt, smart-switch, công cụ chuyển mã, Bảng điều khiển 4 tab, onboarding.
 - **Phase 5:** ký, notarize, DMG, Sparkle.

@@ -1,0 +1,17 @@
+[
+  { "name": "circumflex a", "keys": "aa", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "â" },
+  { "name": "breve a", "keys": "aw", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "ă" },
+  { "name": "circumflex e", "keys": "ee", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "ê" },
+  { "name": "circumflex o", "keys": "oo", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "ô" },
+  { "name": "horn o", "keys": "ow", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "ơ" },
+  { "name": "horn u bare w", "keys": "w", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "ư" },
+  { "name": "horn u via uw", "keys": "uw", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "ư" },
+  { "name": "d stroke", "keys": "dd", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "đ" },
+  { "name": "direct key horn o", "keys": "o[", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "ơ" },
+  { "name": "direct key horn u", "keys": "u]", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "ư" },
+  { "name": "double circumflex a undo", "keys": "aaa", "method": "telex", "orthography": "modern", "restoreIfInvalid": false, "expected": "aa" },
+  { "name": "double circumflex o undo", "keys": "ooo", "method": "telex", "orthography": "modern", "restoreIfInvalid": false, "expected": "oo" },
+  { "name": "double circumflex e undo", "keys": "eee", "method": "telex", "orthography": "modern", "restoreIfInvalid": false, "expected": "ee" },
+  { "name": "double dstroke undo", "keys": "ddd", "method": "telex", "orthography": "modern", "restoreIfInvalid": false, "expected": "dd" },
+  { "name": "double horn w undo", "keys": "uww", "method": "telex", "orthography": "modern", "restoreIfInvalid": false, "expected": "uw" }
+]

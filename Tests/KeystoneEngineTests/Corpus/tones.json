@@ -1,0 +1,15 @@
+[
+  { "name": "a level", "keys": "a", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "a" },
+  { "name": "sac", "keys": "as", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "á" },
+  { "name": "huyen", "keys": "af", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "à" },
+  { "name": "hoi", "keys": "ar", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "ả" },
+  { "name": "nga", "keys": "ax", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "ã" },
+  { "name": "nang", "keys": "aj", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "ạ" },
+  { "name": "double-strike sac clears", "keys": "ass", "method": "telex", "orthography": "modern", "restoreIfInvalid": false, "expected": "as" },
+  { "name": "different tone replaces", "keys": "asf", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "à" },
+  { "name": "viet", "keys": "vieejt", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "việt" },
+  { "name": "tone freedom end", "keys": "tieengs", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "tiếng" },
+  { "name": "tone freedom mid", "keys": "tieesng", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "tiếng" },
+  { "name": "tone freedom early", "keys": "tiseeng", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "tiếng" },
+  { "name": "sac on closed", "keys": "muoons", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "muốn" }
+]
