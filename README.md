@@ -5,7 +5,7 @@ Bộ gõ tiếng Việt cho macOS (26/27) — viết mới hoàn toàn bằng Sw
 - 📄 **Thiết kế đầy đủ:** [`docs/superpowers/specs/2026-09-16-keystone-design.md`](docs/superpowers/specs/2026-09-16-keystone-design.md)
 - 🧭 **Bắt đầu từ đâu:** đọc [`HANDOFF.md`](HANDOFF.md)
 - 🛡️ **Danh mục lỗi cần tránh:** Phần E trong spec
-- 🎨 **Icon:** `Design/icons/` — xem trang so sánh trong HANDOFF
+- 🎨 **Icon (đã chốt):** "Gilded K with Coral Wedge" — `Design/AppIcon.appiconset/` (drop vào Xcode)
 
 ## Kiến trúc
 ```

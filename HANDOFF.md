@@ -29,10 +29,13 @@ HANDOFF.md (file này) · README.md
 ```
 Mã nguồn OpenKey để tham chiếu (đọc để hiểu lỗi, KHÔNG chép): `../OpenKey`.
 
-## Icon
-- Trang xem/chọn (mở được ở Desktop/điện thoại): **https://claude.ai/artifact/PvMAVx1Q5xZRUSEGBiDx8i**
-- 5 hướng: `keystone-arch` (đề xuất — đúng tên, đúng hồn), `ink-brush` (nghệ thuật/thư pháp), `keycap-vowel` "Ế" (rõ nghĩa nhất), `monogram-k` (tối giản), `arch-bridge` (gradient hiện đại).
-- **Chưa chốt** — chọn xong mình sẽ tinh chỉnh + xuất `AppIcon.appiconset`.
+## Icon — ĐÃ CHỐT ✅
+- **Đã chọn: "Gilded K with Coral Wedge"** (`monogram-k`) — chữ K vàng + nêm keystone coral + dấu mũ.
+- SVG gốc: `Design/icons/AppIcon.svg` · master PNG: `Design/icons/AppIcon-1024.png`
+- **`Design/AppIcon.appiconset/`** — đủ 10 kích cỡ + `Contents.json`, kéo thẳng vào `Assets.xcassets` của Xcode.
+- Glyph menu-bar (template, đơn sắc): `Design/menubar/menubarTemplate.png` (18px) + `@2x` (36px). Đặt "Render As: Template Image".
+- Trang so sánh 5 hướng (tham khảo): https://claude.ai/artifact/PvMAVx1Q5xZRUSEGBiDx8i
+- Muốn tinh chỉnh thêm (màu/độ dày nét/bo góc) cứ bảo mình.
 
 ## Việc tiếp theo (lộ trình — chi tiết ở Phần D của spec)
 - **Phase 1 (bắt đầu ở đây):** module `KeystoneEngine` (Swift, thuần) + **bộ test corpus** — Telex + Unicode NFC + đặt dấu kiểu mới. Bắt đầu từ `Syllable` (Phần A §1) và thuật toán đặt dấu (Phần A §4). Viết test trước (TDD); lấy các từ trong Phần E (`chưa`+`a`, `hồng`, `huơ`, `nẽt`, `huỵch`…) làm ca test bắt buộc.
