@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 22 22" role="img" aria-label="Keystone">
+  <!-- macOS template image: single #000, no background -->
+  <g fill="#000000">
+    <!-- Arch band -->
+    <path d="M 3.6 15 A 7.4 7.4 0 0 1 18.4 15 L 15.4 15 A 4.4 4.4 0 0 0 6.6 15 Z"/>
+    <!-- Keystone wedge locking the apex -->
+    <path d="M 8.96 7.37 A 7.9 7.9 0 0 1 13.04 7.37 L 12.14 10.75 A 4.4 4.4 0 0 0 9.86 10.75 Z"/>
+  </g>
+  <!-- Dấu mũ crown -->
+  <path d="M 8.4 6.4 L 11 3.9 L 13.6 6.4" fill="none" stroke="#000000"
+        stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

@@ -1,0 +1,87 @@
+[
+  {
+    "key": "keystone-arch",
+    "name": "Keystone of the Arch",
+    "palette": [
+      "#1c140e",
+      "#3a2a1b",
+      "#f6bd62",
+      "#ffe9b0",
+      "#b1601f"
+    ],
+    "rationale": "A molten-gold keystone locks the apex of a recessed bronze arch — the wedge that holds the whole structure together, a direct metaphor for the app that holds Vietnamese typing together. Carved into the stone's face is the dấu mũ (circumflex ^), engraved as a real bevelled groove with a warm bottom light, so the tone mark reads as the soul of the piece rather than an added sticker; its inverted-V also echoes the arch's apex. The palette is warm amber/gold on espresso charcoal — a premium, architectural, engraved-stone direction that is ownable and deliberately avoids generic app blue. Bold radial geometry and a strong wedge silhouette keep it crisp at 32px while the gradients, top-light sheen and long soft shadow give depth at 1024px.",
+    "app_ok": true,
+    "app_len": 4448,
+    "mb_ok": true,
+    "mb_len": 609
+  },
+  {
+    "key": "keycap-vowel",
+    "name": "Keystone — The Marked Keycap (\"Ế\")",
+    "palette": [
+      "#3B2A73",
+      "#1A1240",
+      "#FBF1DE",
+      "#F59A1E",
+      "#2A1E5C"
+    ],
+    "rationale": "A single tactile keycap carries the letter \"Ế\" — the E with circumflex and acute tone — so the app instantly reads as a Vietnamese input method, with the diacritic stack as the true hero. The stacked marks are lifted into warm amber/gold, popping off an ivory keycap and its cool indigo→violet canvas, so the eye lands on the dấu first, then the key. The palette is deliberately ownable: a premium cool indigo/violet field (not the tired generic blue) warmed by a cream keycap and an amber accent, giving depth without noise. The concave top light, soft lip shadow and embossed legend make the key feel physically pressable, while the bold forms keep it legible from 1024px down to a 32px Dock tile and the menu bar.",
+    "app_ok": true,
+    "app_len": 4714,
+    "mb_ok": true,
+    "mb_len": 561
+  },
+  {
+    "key": "monogram-k",
+    "name": "Keystone — Gilded K with Coral Wedge",
+    "palette": [
+      "#2C2748",
+      "#1E1A2E",
+      "#131019",
+      "#FFE7A6",
+      "#F3AE44",
+      "#C4761C",
+      "#FF875A",
+      "#F1613A"
+    ],
+    "rationale": "A bold geometric monogram \"K\" in warm gold sits on a deep charcoal-indigo squircle, with a sunset-coral keystone wedge locked into the crossing where the stem and both arms meet — the piece that literally holds the letter together — and a single circumflex (dấu mũ) crowning it as the soul of Vietnamese typing. The two \"meaning-bearing\" elements (the keystone and the diacritic) share the coral accent so the eye reads them as one idea, while gold-on-charcoal gives a premium, ownable palette that deliberately avoids the generic app blue. It is confident and logo-grade: the K silhouette, colored wedge, and crown all survive down to 32px and to the flat menu-bar template.",
+    "app_ok": true,
+    "app_len": 3108,
+    "mb_ok": true,
+    "mb_len": 379
+  },
+  {
+    "key": "ink-brush",
+    "name": "Ink & dấu",
+    "palette": [
+      "#2c2018",
+      "#130c08",
+      "#fbf3dd",
+      "#eacf86",
+      "#cca04a",
+      "#c94b3b",
+      "#9c2c22"
+    ],
+    "rationale": "A single calligraphic brushstroke forms the dấu ngã (tilde) — the most expressive of Vietnamese tone marks and the \"soul\" of typing tiếng Việt — laid on a refined espresso-dark ground so the ink glows like gilded lacquer. The stroke tapers to real brush points with a wet top sheen for thư pháp heritage, a small gold tone-dot (dấu nặng) balances the composition, and a vermilion seal (triện/chop) in the corner carries a negative-space keystone wedge, tying the name and the idea of the piece that holds everything together. The warm ivory→gold ink on deep espresso with one vermilion accent is a cultured, ownable palette that deliberately avoids generic keyboard-app blue.",
+    "app_ok": true,
+    "app_len": 4184,
+    "mb_ok": true,
+    "mb_len": 386
+  },
+  {
+    "key": "arch-bridge",
+    "name": "Keystone — The Lit Arch",
+    "palette": [
+      "#34205F",
+      "#1A0E3D",
+      "#4A2A9A",
+      "#F9C24A",
+      "#FFEFC0"
+    ],
+    "rationale": "A clean geometric gateway rises from two piers and meets at a single protruding keystone — the wedge stone that holds the whole arch together, here glowing like a cut gem. Its peaked top does double duty as the Vietnamese circumflex caret (â/ê/ô), so the structural \"keystone\" and the diacritical \"dấu\" are the same lit shape, avoiding clutter while carrying both meanings. The arch bridges the Vietnamese language and the keyboard, and its light pours down through the opening — optimistic and connective. The palette is a deep indigo-to-violet night sky (ownable, not the tired app-store blue) set against a warm amber-gold gem, a premium dawn-through-an-archway contrast with a touch of liquid-glass translucency in the voussoir band.",
+    "app_ok": true,
+    "app_len": 5667,
+    "mb_ok": true,
+    "mb_len": 389
+  }
+]

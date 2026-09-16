@@ -1,0 +1,124 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-label="Keystone app icon">
+  <defs>
+    <!-- Indigo night-sky canvas -->
+    <linearGradient id="bg" x1="0" y1="0" x2="0.35" y2="1">
+      <stop offset="0" stop-color="#3A2570"/>
+      <stop offset="0.55" stop-color="#241452"/>
+      <stop offset="1" stop-color="#170B37"/>
+    </linearGradient>
+    <!-- Upper soft light -->
+    <radialGradient id="toplight" cx="0.5" cy="0.28" r="0.7">
+      <stop offset="0" stop-color="#6B4CC0" stop-opacity="0.55"/>
+      <stop offset="0.6" stop-color="#6B4CC0" stop-opacity="0"/>
+    </radialGradient>
+    <!-- Corner vignette for depth -->
+    <radialGradient id="vignette" cx="0.5" cy="0.46" r="0.75">
+      <stop offset="0.55" stop-color="#000000" stop-opacity="0"/>
+      <stop offset="1" stop-color="#000000" stop-opacity="0.38"/>
+    </radialGradient>
+    <!-- Translucent violet arch band (liquid glass) -->
+    <linearGradient id="arch" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7A58C8"/>
+      <stop offset="0.5" stop-color="#4A2A9A"/>
+      <stop offset="1" stop-color="#301B68"/>
+    </linearGradient>
+    <!-- Gold keystone gem -->
+    <linearGradient id="gold" x1="0.5" y1="0" x2="0.5" y2="1">
+      <stop offset="0" stop-color="#FFF3C8"/>
+      <stop offset="0.35" stop-color="#FBCB5A"/>
+      <stop offset="0.75" stop-color="#F0951F"/>
+      <stop offset="1" stop-color="#D2740F"/>
+    </linearGradient>
+    <!-- Gem glow -->
+    <radialGradient id="goldGlow" cx="0.5" cy="0.45" r="0.55">
+      <stop offset="0" stop-color="#FFCF62" stop-opacity="0.85"/>
+      <stop offset="0.5" stop-color="#F7A937" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#F7A937" stop-opacity="0"/>
+    </radialGradient>
+    <!-- Downward light beam -->
+    <linearGradient id="beam" x1="0.5" y1="0" x2="0.5" y2="1">
+      <stop offset="0" stop-color="#FFD37A" stop-opacity="0.40"/>
+      <stop offset="1" stop-color="#FFD37A" stop-opacity="0"/>
+    </linearGradient>
+    <!-- Contact shadow -->
+    <radialGradient id="ground" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#0A0420" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#0A0420" stop-opacity="0"/>
+    </radialGradient>
+    <!-- Tile edge rim -->
+    <linearGradient id="rim" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.45"/>
+      <stop offset="0.5" stop-color="#FFFFFF" stop-opacity="0"/>
+      <stop offset="1" stop-color="#000000" stop-opacity="0.35"/>
+    </linearGradient>
+    <filter id="soft" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="15"/>
+    </filter>
+    <clipPath id="squircle">
+      <rect x="0" y="0" width="1024" height="1024" rx="228" ry="228"/>
+    </clipPath>
+  </defs>
+
+  <!-- Canvas -->
+  <rect x="0" y="0" width="1024" height="1024" rx="228" ry="228" fill="url(#bg)"/>
+
+  <g clip-path="url(#squircle)">
+    <rect x="0" y="0" width="1024" height="1024" fill="url(#toplight)"/>
+
+    <!-- Ground contact shadow -->
+    <ellipse cx="512" cy="792" rx="290" ry="30" fill="url(#ground)"/>
+
+    <!-- Soft drop shadow of the arch -->
+    <path filter="url(#soft)" opacity="0.5" fill="#0C0526"
+      d="M230,780 L230,512 A282,282 0 0 1 794,512 L794,780 L694,780 L694,512 A182,182 0 0 0 330,512 L330,780 Z"
+      transform="translate(0,20)"/>
+
+    <!-- Gateway band -->
+    <path fill="url(#arch)"
+      d="M230,780 L230,512 A282,282 0 0 1 794,512 L794,780 L694,780 L694,512 A182,182 0 0 0 330,512 L330,780 Z"/>
+
+    <!-- Outer edge highlight / inner edge shadow -->
+    <path fill="none" stroke="#BBA4F2" stroke-opacity="0.42" stroke-width="3"
+      d="M230,780 L230,512 A282,282 0 0 1 794,512 L794,780"/>
+    <path fill="none" stroke="#160B3E" stroke-opacity="0.45" stroke-width="7"
+      d="M330,780 L330,512 A182,182 0 0 1 694,512 L694,780"/>
+
+    <!-- Voussoir joints -->
+    <g stroke="#241458" stroke-opacity="0.5" stroke-width="3.5" stroke-linecap="round">
+      <line x1="683.0" y1="449.8" x2="777.0" y2="415.6"/>
+      <line x1="651.4" y1="395.0" x2="728.0" y2="330.7"/>
+      <line x1="603.0" y1="354.4" x2="653.0" y2="267.8"/>
+      <line x1="421.0" y1="354.4" x2="371.0" y2="267.8"/>
+      <line x1="372.6" y1="395.0" x2="296.0" y2="330.7"/>
+      <line x1="341.0" y1="449.8" x2="247.0" y2="415.6"/>
+    </g>
+    <!-- Pier stone courses -->
+    <g stroke="#241458" stroke-opacity="0.4" stroke-width="3">
+      <line x1="230" y1="612" x2="330" y2="612"/>
+      <line x1="230" y1="700" x2="330" y2="700"/>
+      <line x1="694" y1="612" x2="794" y2="612"/>
+      <line x1="694" y1="700" x2="794" y2="700"/>
+    </g>
+
+    <!-- Light cast down through the opening -->
+    <path fill="url(#beam)" d="M480,333 L544,333 L612,720 L412,720 Z"/>
+
+    <!-- Keystone glow -->
+    <ellipse cx="512" cy="272" rx="196" ry="205" fill="url(#goldGlow)"/>
+
+    <!-- Keystone gem (wedge + circumflex peak) -->
+    <path fill="url(#gold)"
+      d="M461.3,224.4 L512,196 L562.7,224.4 L543.6,332.8 L480.4,332.8 Z"/>
+    <!-- Facets -->
+    <path fill="#FFFFFF" fill-opacity="0.22" d="M461.3,224.4 L512,196 L512,332.8 L480.4,332.8 Z"/>
+    <path fill="#7A3C05" fill-opacity="0.20" d="M512,196 L562.7,224.4 L543.6,332.8 L512,332.8 Z"/>
+    <!-- Apex highlight + specular glint -->
+    <path fill="#FFF7DA" fill-opacity="0.85" d="M485,222 L512,207 L539,222 L512,238 Z"/>
+    <rect x="488" y="238" width="9" height="44" rx="4.5" fill="#FFFDF2" fill-opacity="0.6"
+      transform="rotate(-26 492 260)"/>
+  </g>
+
+  <!-- Tile rim -->
+  <rect x="1" y="1" width="1022" height="1022" rx="227" ry="227"
+    fill="none" stroke="url(#rim)" stroke-width="2"/>
+</svg>

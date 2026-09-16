@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 22 22" role="img" aria-label="Keystone menu bar glyph">
+  <!-- Gateway arch band -->
+  <path fill="#000000"
+    d="M3,19 L3,11 A8,8 0 0 1 19,11 L19,19 L16.4,19 L16.4,11 A5.6,5.6 0 0 0 5.6,11 L5.6,19 Z"/>
+  <!-- Protruding keystone / circumflex peak -->
+  <path fill="#000000" d="M8.7,4.2 L11,1.9 L13.3,4.2 L12.4,7.4 L9.6,7.4 Z"/>
+</svg>

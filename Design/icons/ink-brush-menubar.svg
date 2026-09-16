@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 22 22" width="22" height="22">
+  <!-- Simplified dấu ngã brushstroke, macOS template image -->
+  <path fill="#000000" d="
+    M 2.4 12.6 C 3.6 10.4 5.3 8.7 7.4 8.5 C 9.4 8.3 10.5 9.5 11.4 10.8
+    C 12.7 12.8 14.4 12.2 19.6 8.6 C 15.4 13.0 13.2 13.6 11.2 12.4
+    C 9.8 11.4 8.8 11.1 7.3 11.6 C 5.3 12.2 3.6 13.5 2.4 12.6 Z"/>
+</svg>

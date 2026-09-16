@@ -1,0 +1,100 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" role="img" aria-label="Keystone app icon">
+  <defs>
+    <!-- macOS squircle mask -->
+    <clipPath id="squircle"><rect x="0" y="0" width="1024" height="1024" rx="228" ry="228"/></clipPath>
+    <!-- deep indigo -> violet canvas -->
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4331855"/>
+      <stop offset="0" stop-color="#433185"/>
+      <stop offset="0.52" stop-color="#2A1E5C"/>
+      <stop offset="1" stop-color="#170F3B"/>
+    </linearGradient>
+    <radialGradient id="bgGlow" cx="0.5" cy="0.26" r="0.78">
+      <stop offset="0" stop-color="#7C57D6" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#7C57D6" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="vignette" cx="0.5" cy="0.52" r="0.72">
+      <stop offset="0.62" stop-color="#0A0622" stop-opacity="0"/>
+      <stop offset="1" stop-color="#0A0622" stop-opacity="0.5"/>
+    </radialGradient>
+    <!-- keycap sides / body -->
+    <linearGradient id="capBody" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#EADABB"/>
+      <stop offset="0.62" stop-color="#D8BE90"/>
+      <stop offset="1" stop-color="#BEA070"/>
+    </linearGradient>
+    <!-- keycap top face -->
+    <linearGradient id="capTop" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFBF3"/>
+      <stop offset="0.5" stop-color="#FBF1DE"/>
+      <stop offset="1" stop-color="#EEDDBE"/>
+    </linearGradient>
+    <linearGradient id="sheen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.85"/>
+      <stop offset="0.55" stop-color="#ffffff" stop-opacity="0.06"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <!-- amber diacritic hero -->
+    <linearGradient id="amber" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFC64F"/>
+      <stop offset="0.5" stop-color="#F59A1E"/>
+      <stop offset="1" stop-color="#DE770A"/>
+    </linearGradient>
+    <!-- indigo legend -->
+    <linearGradient id="legendInk" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3B2D77"/>
+      <stop offset="1" stop-color="#221950"/>
+    </linearGradient>
+    <filter id="capShadow" x="-40%" y="-40%" width="180%" height="180%">
+      <feDropShadow dx="0" dy="28" stdDeviation="30" flood-color="#0B0722" flood-opacity="0.55"/>
+    </filter>
+    <filter id="legendShadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="5" stdDeviation="4" flood-color="#1A1140" flood-opacity="0.32"/>
+    </filter>
+    <clipPath id="topFace"><rect x="268" y="280" width="488" height="470" rx="96"/></clipPath>
+  </defs>
+
+  <g clip-path="url(#squircle)">
+    <!-- canvas -->
+    <rect width="1024" height="1024" fill="url(#bg)"/>
+    <rect width="1024" height="1024" fill="url(#bgGlow)"/>
+    <rect width="1024" height="1024" fill="url(#vignette)"/>
+
+    <!-- keycap -->
+    <g filter="url(#capShadow)">
+      <!-- body / sides -->
+      <rect x="246" y="262" width="532" height="524" rx="116" fill="url(#capBody)"/>
+      <!-- top face -->
+      <rect x="268" y="280" width="488" height="470" rx="96" fill="url(#capTop)"/>
+    </g>
+
+    <!-- concave top light + rim, clipped to top face -->
+    <g clip-path="url(#topFace)">
+      <rect x="268" y="280" width="488" height="300" fill="url(#sheen)"/>
+      <ellipse cx="512" cy="318" rx="230" ry="86" fill="#ffffff" opacity="0.35"/>
+    </g>
+    <rect x="269" y="281" width="486" height="468" rx="95" fill="none" stroke="#ffffff" stroke-opacity="0.55" stroke-width="2"/>
+    <rect x="269" y="281" width="486" height="468" rx="95" fill="none" stroke="#7A5E28" stroke-opacity="0.12" stroke-width="1"/>
+
+    <!-- legend: Ế  (E + circumflex + acute) -->
+    <g transform="translate(0,32)" filter="url(#legendShadow)">
+      <!-- diacritic hero, amber -->
+      <g fill="none" stroke="url(#amber)" stroke-width="30" stroke-linecap="round" stroke-linejoin="round">
+        <!-- circumflex -->
+        <polyline points="452,416 517,370 582,416"/>
+        <!-- acute tone -->
+        <line x1="509" y1="352" x2="545" y2="312"/>
+      </g>
+      <!-- E, indigo -->
+      <g fill="url(#legendInk)">
+        <rect x="438" y="452" width="48"  height="208" rx="16"/>
+        <rect x="438" y="452" width="160" height="48"  rx="16"/>
+        <rect x="438" y="564" width="132" height="44"  rx="15"/>
+        <rect x="438" y="612" width="160" height="48"  rx="16"/>
+      </g>
+    </g>
+  </g>
+
+  <!-- premium hairline edge -->
+  <rect x="3" y="3" width="1018" height="1018" rx="226" fill="none" stroke="#ffffff" stroke-opacity="0.08" stroke-width="2"/>
+</svg>

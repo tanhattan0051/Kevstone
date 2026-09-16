@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-label="Keystone app icon">
+  <defs>
+    <!-- Charcoal-indigo canvas -->
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2C2748"/>
+      <stop offset="0.55" stop-color="#1E1A2E"/>
+      <stop offset="1" stop-color="#131019"/>
+    </linearGradient>
+    <radialGradient id="toplight" cx="0.5" cy="0.0" r="0.95">
+      <stop offset="0" stop-color="#9584E6" stop-opacity="0.30"/>
+      <stop offset="0.55" stop-color="#9584E6" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="vignette" cx="0.5" cy="1" r="0.95">
+      <stop offset="0.55" stop-color="#000000" stop-opacity="0"/>
+      <stop offset="1" stop-color="#000000" stop-opacity="0.34"/>
+    </radialGradient>
+
+    <!-- Warm gold K (unified top-lit gradient) -->
+    <linearGradient id="gold" gradientUnits="userSpaceOnUse" x1="360" y1="300" x2="560" y2="760">
+      <stop offset="0" stop-color="#FFE7A6"/>
+      <stop offset="0.45" stop-color="#F3AE44"/>
+      <stop offset="1" stop-color="#C4761C"/>
+    </linearGradient>
+
+    <!-- Sunset-coral accent (keystone + diacritic) -->
+    <linearGradient id="coral" x1="0" y1="0" x2="0.35" y2="1">
+      <stop offset="0" stop-color="#FFB27C"/>
+      <stop offset="0.5" stop-color="#FF875A"/>
+      <stop offset="1" stop-color="#F1613A"/>
+    </linearGradient>
+    <linearGradient id="coralHi" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+
+    <filter id="glyphShadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="16" stdDeviation="20" flood-color="#0A0710" flood-opacity="0.5"/>
+    </filter>
+
+    <clipPath id="clip"><rect x="0" y="0" width="1024" height="1024" rx="228" ry="228"/></clipPath>
+  </defs>
+
+  <!-- Squircle base -->
+  <g clip-path="url(#clip)">
+    <rect width="1024" height="1024" fill="url(#bg)"/>
+    <rect width="1024" height="1024" fill="url(#toplight)"/>
+    <rect width="1024" height="1024" fill="url(#vignette)"/>
+  </g>
+  <!-- Inner rim highlight -->
+  <rect x="2.5" y="2.5" width="1019" height="1019" rx="226" fill="none" stroke="#FFFFFF" stroke-opacity="0.10" stroke-width="3"/>
+
+  <!-- Monogram -->
+  <g filter="url(#glyphShadow)">
+    <!-- K: stem + two diagonal arms -->
+    <g fill="none" stroke="url(#gold)" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M402 330 L402 738" stroke-width="100"/>
+      <path d="M424 534 L690 336" stroke-width="92"/>
+      <path d="M424 534 L690 738" stroke-width="92"/>
+    </g>
+
+    <!-- Keystone wedge binding stem + arms at the apex of the crossing -->
+    <path d="M432 476 L560 476 L532 592 L460 592 Z" fill="url(#coral)"/>
+    <path d="M432 476 L560 476 L548 524 L444 524 Z" fill="url(#coralHi)"/>
+
+    <!-- Circumflex (dấu mũ) crowning the monogram -->
+    <path d="M436 292 L520 236 L604 292" fill="none" stroke="url(#coral)"
+          stroke-width="48" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>
