@@ -41,6 +41,7 @@ struct MenuBarContent: View {
             Button("Bảng điều khiển…") { open(WindowID.controlPanel) }
             Button("Công cụ chuyển mã…") { open(WindowID.convert) }
             Button("Gõ tắt…") { open(WindowID.macros) }
+            Button("Hướng dẫn cấp quyền…") { open(WindowID.onboarding) }
 
             Divider()
 
@@ -52,7 +53,7 @@ struct MenuBarContent: View {
             // `openWindow` only exists inside the SwiftUI environment. This
             // view is the MenuBarExtra's content, so its `onAppear` is the
             // first point after the scene exists where we can wire it up.
-            model.openControlPanelRequest = { openWindow(id: WindowID.controlPanel) }
+            model.openWindowRequest = { id in openWindow(id: id) }
             model.performLaunchOpenIfNeeded()
         }
     }

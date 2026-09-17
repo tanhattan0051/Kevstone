@@ -22,9 +22,12 @@ Keystone (app)  (SwiftUI) — MenuBarExtra · Bảng điều khiển · Gõ tắ
 - 🚧 **Phase 4 — Tính năng & UI:** Bảng điều khiển 4 tab, Công cụ chuyển mã, trình sửa Gõ tắt, khoá single-instance.
   - ✅ **Gõ tắt (macro) — nối engine XONG:** nổ lúc chốt từ theo phím thô, thắng cả rendering tiếng Việt lẫn restore-if-invalid (giải Open Q #9); 2 nhánh (bật/khi tắt tiếng Việt); import được file macro OpenKey (`.txt`).
   - ✅ **Smart-switch — XONG (cần nghiệm thu máy thật):** nhớ & khôi phục VN/English + bảng mã **theo từng app**, chạy theo notification đổi app (off hot-path, E.7); nút "Xoá ghi nhớ theo ứng dụng".
-  - ⬜ **Còn:** onboarding + vài toggle phụ (viết hoa đầu câu, gõ tắt phụ âm f→ph/g→ng, phím chuyển, khởi động cùng máy, hiện Dock icon…).
+  - ✅ **Gõ tắt phụ âm + viết hoa đầu câu — XONG:** `f→ph, j→gi, w→qu` (đầu từ), `g→ng, h→nh, k→ch` (sau nguyên âm), tự viết hoa chữ đầu câu — đều tắt mặc định, corpus giữ nguyên byte.
+  - ✅ **Toggle hệ thống — XONG (cần nghiệm thu máy thật):** khởi động cùng macOS (`SMAppService`), hiện Dock icon, mở Bảng điều khiển khi khởi động.
+  - ✅ **Onboarding — XONG (cần nghiệm thu máy thật):** cửa sổ "Chào mừng" hướng dẫn cấp quyền Accessibility (bắt buộc) + Input Monitoring (khuyến nghị), tự mở lần đầu.
+  - ⬜ **Còn (không chặn):** vài toggle phụ chưa nối (Kiểm tra chính tả, Cho phép bỏ dấu tự do, Sửa lỗi gợi ý, Gửi từng phím, Phím chuyển) + kiểm tra bản mới thật.
   - **Phase 5** (ký/notarize/DMG) đã có script (`Scripts/`), chờ tài khoản Apple.
-- Toàn bộ test **xanh**: ~251 ca engine + **36 ca input**. Quyết định ở [`DECISIONS.md`](DECISIONS.md). Xem `HANDOFF.md`.
+- Toàn bộ test **xanh**: **68 ca engine + 36 ca input**. Quyết định ở [`DECISIONS.md`](DECISIONS.md). Xem `HANDOFF.md`.
 
 ```
 swift build && swift test   # engine + input phải luôn xanh

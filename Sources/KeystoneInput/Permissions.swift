@@ -31,4 +31,17 @@ public enum Permissions {
     public static func inputMonitoringGranted() -> Bool {
         IOHIDCheckAccess(kIOHIDRequestTypeListenEvent) == kIOHIDAccessTypeGranted
     }
+
+    /// Prompts the system Input Monitoring permission dialog (adds Keystone
+    /// to the list). Unlike Accessibility this is a one-shot request API —
+    /// there is no companion "with options" prompt variant.
+    public static func requestInputMonitoring() {
+        _ = IOHIDRequestAccess(kIOHIDRequestTypeListenEvent)
+    }
+
+    public static func openInputMonitoringSettings() {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent") {
+            NSWorkspace.shared.open(url)
+        }
+    }
 }

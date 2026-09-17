@@ -13,6 +13,7 @@ enum WindowID {
     static let controlPanel = "control-panel"
     static let convert = "convert"
     static let macros = "macros"
+    static let onboarding = "onboarding"
 }
 
 @main
@@ -48,13 +49,18 @@ struct KeystoneApp: App {
             MacrosView(store: macroStore)
         }
         .windowResizability(.contentSize)
+
+        Window("Chào mừng", id: WindowID.onboarding) {
+            OnboardingView(model: model)
+        }
+        .windowResizability(.contentSize)
     }
 }
 
 /// The menu-bar icon. Unlike the menu's *content* (whose `onAppear` only
 /// fires when the menu is first opened), the label is rendered at launch —
-/// so it's the reliable point to register the Control Panel opener and honor
-/// "Bật bảng này khi khởi động" (`AppModel.openControlPanelAtLaunch`).
+/// so it's the reliable point to register `openWindowRequest` and drive the
+/// launch-open (onboarding on first run, else "Bật bảng này khi khởi động").
 private struct MenuBarLabel: View {
     @Bindable var model: AppModel
     @Environment(\.openWindow) private var openWindow
@@ -62,7 +68,7 @@ private struct MenuBarLabel: View {
     var body: some View {
         Image(systemName: model.enabled ? "character.bubble.fill" : "character.bubble")
             .onAppear {
-                model.openControlPanelRequest = { openWindow(id: WindowID.controlPanel) }
+                model.openWindowRequest = { id in openWindow(id: id) }
                 model.performLaunchOpenIfNeeded()
             }
     }

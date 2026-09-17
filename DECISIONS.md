@@ -370,3 +370,63 @@ All three flags default OFF; `App/AppModel.swift`'s
 `quickStartConsonant`/`quickEndConsonant`/`autoCapitalize` properties (previously
 persistence-only scaffolding) now also call `pushConfig()` in their `didSet`,
 same pattern as `quickTelex`/`restoreIfInvalid`.
+
+## Onboarding / permissions (Phase 4)
+
+Resolves spec **§5 "Onboarding / permissions flow"**.
+
+**No separate `PermissionsModel`.** The spec sketches a standalone
+`@Observable PermissionsModel` with its own 1 s poll timer. `AppModel`
+already observes `accessibilityTrusted`, `inputMonitoring`, `tapRunning`, and
+`needsRelaunch`, refreshed every 1.5 s by the `statusTimer` started in
+`bootstrap()` (pre-existing, not new). `App/OnboardingView.swift` binds
+directly to those fields instead of duplicating the polling — one status
+timer for the whole app, not two.
+
+**Accessibility is required, Input Monitoring is recommended.** The
+Accessibility card has no way to be dismissed short of granting it or
+finishing/deferring onboarding entirely — the tap cannot exist without it.
+The Input Monitoring card is informational: its buttons help, but nothing
+in the flow blocks on it, per the spec's "don't hard-block" note.
+
+**The relaunch affordance covers "granted but not yet effective".** A fresh
+Accessibility grant often doesn't take effect for an already-running
+process. `AppModel.needsRelaunch` (existing) goes true once the tap has
+failed to come up a couple of refresh cycles after trust was granted; the
+Accessibility card shows a "Khởi động lại Keystone" button (→
+`model.relaunch()`, existing) in that state instead of polling forever.
+
+**Auto-opens once at first launch, reachable afterward from the menu.**
+`AppModel.needsOnboarding` is `!accessibilityTrusted && !didFinishOnboarding`
+— a new persisted flag, same `loadBool`/`Keys` pattern as the app's other
+settings. The single-window launch mechanism
+(`AppModel.openControlPanelRequest` / `performLaunchOpenIfNeeded()`) is
+generalized to `openWindowRequest: ((String) -> Void)?` so it can open either
+window; `performLaunchOpenIfNeeded()` now checks `needsOnboarding` first and
+falls back to `openControlPanelAtLaunch` — onboarding wins on a first run so
+it's seen before any auto-opened Control Panel. Once dismissed, it stays
+reachable via the menu bar's new "Hướng dẫn cấp quyền…" item
+(`MenuBarContent.swift`), so a user who deferred permissions can come back
+to it.
+
+**The user is never trapped.** The footer button
+("Bắt đầu gõ" when Accessibility is trusted, "Để sau" otherwise) is never
+disabled; either label calls `model.finishOnboarding()` (sets
+`didFinishOnboarding = true`) then `dismiss()`. Deferring is always available.
+
+**No macOS-26-only APIs.** The spec's sketch uses `.glassEffect`/
+`.buttonStyle(.glassProminent/.glass)` (Liquid Glass, macOS 26). The
+deployment target here is conservative (macOS 13/14), so the shipped
+`OnboardingView` uses `.regularMaterial` card backgrounds, a `RoundedRectangle`
+stroke, SF Symbols, and `.buttonStyle(.borderedProminent)` for primary
+actions instead — same visual intent (cards, live status, a prominent
+action), widely-available APIs.
+
+**Integration-only, not unit-testable headless.** Same reasoning as the
+CGEventTap, `NSWorkspace` smart-switch wiring, and `SMAppService`/
+`openWindow` system-toggle wiring above: `AXIsProcessTrusted`,
+`IOHIDRequestAccess`, `NSWorkspace.shared.open`, and the SwiftUI
+`Window`/`openWindow`/`dismiss` machinery all need a real running app and a
+real permission dialog to exercise. Verified by `swift build` staying clean
+and by the existing engine/input suites staying green (68 + 36 tests) — no
+fabricated unit tests were added for this UI layer.

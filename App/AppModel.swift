@@ -228,6 +228,14 @@ final class AppModel {
         didSet { UserDefaults.standard.set(openControlPanelAtLaunch, forKey: Keys.openControlPanelAtLaunch) }
     }
 
+    /// Whether the onboarding window has already been dismissed once (via its
+    /// footer button, "Bắt đầu gõ"/"Để sau") — either way counts as finished,
+    /// per the spec's "never trap the user". Drives `needsOnboarding` below so
+    /// the window only auto-opens at launch until the user has seen it once.
+    var didFinishOnboarding: Bool = AppModel.loadBool(Keys.didFinishOnboarding, default: false) {
+        didSet { UserDefaults.standard.set(didFinishOnboarding, forKey: Keys.didFinishOnboarding) }
+    }
+
     /// "Kiểm tra bản mới khi khởi động"
     // TODO: wire to an update checker (design spec Open Q #9 — Sparkle vs bespoke, Phase 5).
     var checkForUpdates: Bool = AppModel.loadBool(Keys.checkForUpdates, default: true) {
@@ -249,8 +257,9 @@ final class AppModel {
 
     /// Closure the SwiftUI layer registers once the `MenuBarExtra` scene
     /// exists, since `openWindow` is only available in that environment (not
-    /// in `AppDelegate`/`bootstrap()`). Invoked by `performLaunchOpenIfNeeded()`.
-    var openControlPanelRequest: (() -> Void)?
+    /// in `AppDelegate`/`bootstrap()`). Takes a `WindowID` string. Invoked by
+    /// `performLaunchOpenIfNeeded()`.
+    var openWindowRequest: ((String) -> Void)?
 
     // MARK: - Permission / tap status (existing)
 
@@ -260,6 +269,11 @@ final class AppModel {
     /// Trusted + we tried to start the tap, but it isn't live — macOS often
     /// only honors a fresh Accessibility grant after the process relaunches.
     private(set) var needsRelaunch = false
+
+    /// True until Accessibility is trusted (the hard requirement for the tap)
+    /// or the user has explicitly finished/dismissed onboarding once — drives
+    /// the auto-open-at-launch behavior in `performLaunchOpenIfNeeded()`.
+    var needsOnboarding: Bool { !accessibilityTrusted && !didFinishOnboarding }
 
     private let controller: EngineController
     private let tap: EventTapController
@@ -343,6 +357,21 @@ final class AppModel {
         Permissions.openAccessibilitySettings()
     }
 
+    func requestInputMonitoring() {
+        Permissions.requestInputMonitoring()
+    }
+
+    func openInputMonitoringSettings() {
+        Permissions.openInputMonitoringSettings()
+    }
+
+    /// Marks onboarding as seen so it stops auto-opening at launch. The
+    /// window itself closes via `dismiss()` right after calling this — never
+    /// gated on any permission actually being granted (never trap the user).
+    func finishOnboarding() {
+        didFinishOnboarding = true
+    }
+
     /// Reconciles the persisted `runAtLogin` toggle with `SMAppService`'s
     /// actual status once at launch — e.g. the user removed the login item
     /// via System Settings directly, or a previous register call silently
@@ -370,16 +399,23 @@ final class AppModel {
         isSyncingLoginItem = false
     }
 
-    /// Opens the Control Panel at launch if the user asked for it. Must run
-    /// after the SwiftUI scene has registered `openControlPanelRequest`
+    /// Opens onboarding or the Control Panel at launch, whichever applies.
+    /// Must run after the SwiftUI scene has registered `openWindowRequest`
     /// (`openWindow` doesn't exist in `AppDelegate`/`bootstrap()`), and only
-    /// once per launch.
+    /// once per launch. Onboarding takes priority: on a first run (or any run
+    /// where Accessibility still isn't trusted and onboarding was never
+    /// finished), it needs to be seen before "Bật bảng này khi khởi động"
+    /// would otherwise open the Control Panel instead.
     func performLaunchOpenIfNeeded() {
         guard !didAttemptLaunchOpen else { return }
         didAttemptLaunchOpen = true
-        guard openControlPanelAtLaunch else { return }
-        NSApp.activate(ignoringOtherApps: true)
-        openControlPanelRequest?()
+        if needsOnboarding {
+            NSApp.activate(ignoringOtherApps: true)
+            openWindowRequest?(WindowID.onboarding)
+        } else if openControlPanelAtLaunch {
+            NSApp.activate(ignoringOtherApps: true)
+            openWindowRequest?(WindowID.controlPanel)
+        }
     }
 
     /// Relaunch a fresh instance of Keystone and quit this one — the fix for the
@@ -553,6 +589,7 @@ final class AppModel {
         static let macroAutoCapitalize = "settings.macroAutoCapitalize"
         static let runAtLogin = "settings.runAtLogin"
         static let openControlPanelAtLaunch = "settings.openControlPanelAtLaunch"
+        static let didFinishOnboarding = "settings.didFinishOnboarding"
         static let checkForUpdates = "settings.checkForUpdates"
         static let showDockIcon = "settings.showDockIcon"
     }
