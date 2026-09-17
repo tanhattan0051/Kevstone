@@ -1,7 +1,7 @@
 // AppModel.swift — owns the engine controller and the live event tap, and
 // exposes the small amount of state the menu-bar UI needs (on/off, input
-// method, permission status). Everything here runs on the main actor; the
-// tap itself runs its own dedicated thread inside KeystoneInput.
+// method, permission + tap status). Everything here runs on the main actor;
+// the tap itself runs its own dedicated thread inside KeystoneInput.
 
 import SwiftUI
 import AppKit
@@ -16,13 +16,19 @@ final class AppModel {
 
     var enabled = true { didSet { controller.setActive(enabled) } }
     var inputMethod: InputMethod = .telex { didSet { pushConfig() } }
+
     private(set) var accessibilityTrusted = Permissions.isAccessibilityTrusted()
     private(set) var inputMonitoring = Permissions.inputMonitoringGranted()
+    private(set) var tapRunning = false
+    /// Trusted + we tried to start the tap, but it isn't live — macOS often
+    /// only honors a fresh Accessibility grant after the process relaunches.
+    private(set) var needsRelaunch = false
 
     private let controller: EngineController
     private let tap: EventTapController
-    private var permTimer: Timer?
+    private var statusTimer: Timer?
     private var tapStarted = false
+    private var startAttempts = 0
     private var appSwitchObserver: NSObjectProtocol?
 
     private init() {
@@ -37,25 +43,36 @@ final class AppModel {
         ) { [weak self] _ in
             Task { @MainActor in self?.controller.resetBuffer() }
         }
-        refreshPermissions()
-        if accessibilityTrusted {
-            startTap()
-        } else {
-            Permissions.promptAccessibility()
-            startPermissionPolling()
+        if !accessibilityTrusted { Permissions.promptAccessibility() }
+        refresh()
+        // A light status poll: reflects grant + tap health in the menu, and
+        // starts the tap the moment Accessibility is granted. Cheap; runs only
+        // while the app is up.
+        statusTimer = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.refresh() }
         }
     }
 
     func shutdown() {
         tap.stop()
-        permTimer?.invalidate()
+        statusTimer?.invalidate()
         if let o = appSwitchObserver { NSWorkspace.shared.notificationCenter.removeObserver(o) }
     }
 
     func requestAccessibility() {
         Permissions.promptAccessibility()
         Permissions.openAccessibilitySettings()
-        startPermissionPolling()
+    }
+
+    /// Relaunch a fresh instance of Keystone and quit this one — the fix for the
+    /// "granted but tap still won't create" case.
+    func relaunch() {
+        let path = Bundle.main.executableURL ?? URL(fileURLWithPath: CommandLine.arguments[0])
+        let proc = Process()
+        proc.executableURL = path
+        try? proc.run()
+        shutdown()
+        NSApp.terminate(nil)
     }
 
     func quit() { shutdown(); NSApp.terminate(nil) }
@@ -64,6 +81,7 @@ final class AppModel {
         guard !tapStarted else { return }
         tap.start()
         tapStarted = true
+        startAttempts = 0
         controller.setActive(enabled)
     }
 
@@ -71,19 +89,23 @@ final class AppModel {
         controller.updateConfig(EngineConfig(inputMethod: inputMethod))
     }
 
-    private func startPermissionPolling() {
-        permTimer?.invalidate()
-        permTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.refreshPermissions() }
-        }
-    }
-
-    private func refreshPermissions() {
+    private func refresh() {
         accessibilityTrusted = Permissions.isAccessibilityTrusted()
         inputMonitoring = Permissions.inputMonitoringGranted()
+
         if accessibilityTrusted && !tapStarted {
             startTap()
-            permTimer?.invalidate(); permTimer = nil
+        }
+        tapRunning = tapStarted && tap.isRunning
+
+        // If we're trusted and started but the tap still isn't live after a few
+        // polls, the grant needs a relaunch to take effect.
+        if accessibilityTrusted && tapStarted && !tap.isRunning {
+            startAttempts += 1
+            needsRelaunch = startAttempts >= 2
+        } else {
+            startAttempts = 0
+            needsRelaunch = false
         }
     }
 }
