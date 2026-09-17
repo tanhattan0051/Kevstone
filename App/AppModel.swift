@@ -183,16 +183,24 @@ final class AppModel {
         didSet { UserDefaults.standard.set(rememberCodePerApp, forKey: Keys.rememberCodePerApp) }
     }
 
-    /// "Sửa lỗi gợi ý (trình duyệt, Excel,...)"
-    // TODO: wire to engine (design spec E.2/E.3 — autocomplete-safe editing).
-    var autoFixSuggestion: Bool = AppModel.loadBool(Keys.autoFixSuggestion, default: true) {
-        didSet { UserDefaults.standard.set(autoFixSuggestion, forKey: Keys.autoFixSuggestion) }
+    /// "Sửa lỗi gợi ý (trình duyệt, Excel,...)" — when ON, posts the composed
+    /// Unicode string on the synthetic keyDown only (the anti-double-char
+    /// remedy for browsers/Excel). Default OFF: both keyDown+keyUp carry the
+    /// string, unchanged from the tap's original behavior (design spec E.2/E.3).
+    var autoFixSuggestion: Bool = AppModel.loadBool(Keys.autoFixSuggestion, default: false) {
+        didSet {
+            UserDefaults.standard.set(autoFixSuggestion, forKey: Keys.autoFixSuggestion)
+            pushInputBehavior()
+        }
     }
 
-    /// "Gửi từng phím (bật nếu bị lỗi)"
-    // TODO: wire to input layer (per-grapheme send fallback, design spec E.3).
+    /// "Gửi từng phím (bật nếu bị lỗi)" — per-grapheme send fallback for apps
+    /// that mishandle multi-char Unicode insertions (design spec E.3).
     var sendEachKeystroke: Bool = AppModel.loadBool(Keys.sendEachKeystroke, default: false) {
-        didSet { UserDefaults.standard.set(sendEachKeystroke, forKey: Keys.sendEachKeystroke) }
+        didSet {
+            UserDefaults.standard.set(sendEachKeystroke, forKey: Keys.sendEachKeystroke)
+            pushInputBehavior()
+        }
     }
 
     /// "Phím chuyển:"
@@ -361,6 +369,7 @@ final class AppModel {
     }
 
     func bootstrap() {
+        pushInputBehavior()   // push whatever was loaded from UserDefaults above
         reconcileLoginItemStatus()
         switchDetector.target = switchKeyModifier.chord
         installSwitchKeyMonitors()
@@ -503,7 +512,7 @@ final class AppModel {
         quickEndConsonant = false
         smartSwitch = true
         rememberCodePerApp = true
-        autoFixSuggestion = true
+        autoFixSuggestion = false
         sendEachKeystroke = false
         switchKeyModifier = .controlShift
         macrosEnabled = true
@@ -632,6 +641,13 @@ final class AppModel {
             autoCapitalize: autoCapitalize,
             allowFreeToneMark: allowFreeToneMark
         ))
+    }
+
+    /// Pushes `sendEachKeystroke`/`autoFixSuggestion` into the tap's
+    /// `InputBehavior` snapshot (design spec E.2/E.3) — the input-layer
+    /// counterpart to `pushConfig()` above.
+    private func pushInputBehavior() {
+        tap.updateBehavior(InputBehavior(sendEachKeystroke: sendEachKeystroke, textOnKeyDownOnly: autoFixSuggestion))
     }
 
     private func refresh() {

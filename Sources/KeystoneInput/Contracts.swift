@@ -89,3 +89,23 @@ public final class SystemStateCache: @unchecked Sendable {
         lock.withLockUnchecked { f(&state) }
     }
 }
+
+/// App-compatibility knobs for how the tap posts synthesized keystrokes
+/// (design spec E.2/E.3). Pushed from `AppModel` into `EventTapController`
+/// as a snapshot, read once per edit under a small lock — see
+/// `EventTapController.updateBehavior`.
+public struct InputBehavior: Sendable, Equatable {
+    /// "Gửi từng phím" — post the composed text one grapheme at a time
+    /// instead of a single `postText(wholeString)` call.
+    public var sendEachKeystroke: Bool
+    /// "Sửa lỗi gợi ý" — post the composed Unicode string on the synthetic
+    /// keyDown only, not on keyUp too (the documented anti-double-char fix
+    /// for browsers/Excel). Default false = both events carry the string,
+    /// the tap's original behavior; this is an opt-in remedy.
+    public var textOnKeyDownOnly: Bool
+
+    public init(sendEachKeystroke: Bool = false, textOnKeyDownOnly: Bool = false) {
+        self.sendEachKeystroke = sendEachKeystroke
+        self.textOnKeyDownOnly = textOnKeyDownOnly
+    }
+}

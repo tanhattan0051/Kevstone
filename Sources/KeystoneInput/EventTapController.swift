@@ -21,6 +21,7 @@ import CoreGraphics
 import AppKit
 import Foundation
 import KeystoneEngine
+import os
 
 public final class EventTapController: @unchecked Sendable {
     static let selfTag: Int64 = 0x4B_53_54_4F_4E_45   // "KSTONE"
@@ -34,9 +35,22 @@ public final class EventTapController: @unchecked Sendable {
     private var watchdog: DispatchSourceTimer?
     private let watchdogQueue = DispatchQueue(label: "com.tanta.keystone.watchdog")
 
+    // App-compatibility posting knobs (design spec E.2/E.3), pushed from
+    // AppModel off the hot path and read once per edit — same lock/snapshot
+    // pattern as EngineController's config.
+    private let behaviorLock = OSAllocatedUnfairLock()
+    private var behavior = InputBehavior()
+
     public init(engine: EngineController) {
         self.engine = engine
         self.synthSource = CGEventSource(stateID: .privateState)
+    }
+
+    /// Updates the posting-behavior snapshot (`sendEachKeystroke`,
+    /// `textOnKeyDownOnly`) the tap reads on the next edit. Safe to call from
+    /// any thread; guarded by `behaviorLock`.
+    public func updateBehavior(_ b: InputBehavior) {
+        behaviorLock.withLock { behavior = b }
     }
 
     public var isRunning: Bool { tapPort.map { CGEvent.tapIsEnabled(tap: $0) } ?? false }
@@ -121,7 +135,14 @@ public final class EventTapController: @unchecked Sendable {
 
         let raw = makeRawKey(event)
         let (suppress, edit, _) = engine.handle(raw)
-        if let edit { KeystrokeExecutor(sink: TapSink(source: synthSource, proxy: proxy)).execute(edit) }
+        if let edit {
+            // One cheap lock acquire per edit (not per raw keystroke that
+            // passes through untouched) — acceptable on the hot path, same
+            // cost class as EngineController's config lock.
+            let b = behaviorLock.withLock { behavior }
+            let sink = TapSink(source: synthSource, proxy: proxy, textOnKeyDownOnly: b.textOnKeyDownOnly)
+            KeystrokeExecutor(sink: sink).execute(edit, eachGrapheme: b.sendEachKeystroke)
+        }
         return suppress ? nil : Unmanaged.passUnretained(event)
     }
 
@@ -152,6 +173,12 @@ private func keystoneTapCallback(proxy: CGEventTapProxy, type: CGEventType, even
 private struct TapSink: EventSink {
     let source: CGEventSource?
     let proxy: CGEventTapProxy
+    /// "Sửa lỗi gợi ý" (`autoFixSuggestion`, default ON): when true, the
+    /// Unicode string is set on the keyDown event only — the keyUp is posted
+    /// bare — which is the documented remedy for browsers/Excel doubling
+    /// synthesized text. When false, both events carry the string (the old
+    /// behavior).
+    let textOnKeyDownOnly: Bool
 
     func postBackspace(count: Int) {
         for _ in 0..<count { post(virtualKey: 51, keyDown: true); post(virtualKey: 51, keyDown: false) }
@@ -166,8 +193,9 @@ private struct TapSink: EventSink {
               let up = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: false) else { return }
         let utf16 = Array(text.utf16)
         utf16.withUnsafeBufferPointer { b in
-            if let base = b.baseAddress {
-                down.keyboardSetUnicodeString(stringLength: b.count, unicodeString: base)
+            guard let base = b.baseAddress else { return }
+            down.keyboardSetUnicodeString(stringLength: b.count, unicodeString: base)
+            if !textOnKeyDownOnly {
                 up.keyboardSetUnicodeString(stringLength: b.count, unicodeString: base)
             }
         }

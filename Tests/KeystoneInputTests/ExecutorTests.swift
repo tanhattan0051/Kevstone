@@ -48,4 +48,36 @@ struct ExecutorTests {
         #expect(sink.backspaces.isEmpty)
         #expect(sink.texts.isEmpty)
     }
+
+    // MARK: - eachGrapheme ("Gửi từng phím")
+    //
+    // The `TapSink` keyDown-only behavior (`autoFixSuggestion`) is
+    // production-only/integration, like the rest of the live CGEventTap — it
+    // needs a real synthetic CGEvent pair to observe, so it isn't unit-tested
+    // here.
+
+    @Test func eachGraphemeFalseSendsWholeStringInOneCall() {
+        let sink = FakeSink()
+        let executor = KeystrokeExecutor(sink: sink)
+        executor.execute(EngineResult(backspaceCount: 2, text: "việt"), eachGrapheme: false)
+        #expect(sink.backspaces == [2])
+        #expect(sink.texts == ["việt"])
+    }
+
+    @Test func eachGraphemeTrueSendsOneCharacterPerCall() {
+        let sink = FakeSink()
+        let executor = KeystrokeExecutor(sink: sink)
+        executor.execute(EngineResult(backspaceCount: 2, text: "việt"), eachGrapheme: true)
+        #expect(sink.backspaces == [2])
+        // "ệ" is a single Swift Character (e + combining dot below + circumflex).
+        #expect(sink.texts == ["v", "i", "ệ", "t"])
+    }
+
+    @Test func eachGraphemeTrueWithEmptyTextSendsNoText() {
+        let sink = FakeSink()
+        let executor = KeystrokeExecutor(sink: sink)
+        executor.execute(EngineResult(backspaceCount: 3, text: ""), eachGrapheme: true)
+        #expect(sink.backspaces == [3])
+        #expect(sink.texts.isEmpty)
+    }
 }

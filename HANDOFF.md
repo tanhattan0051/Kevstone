@@ -57,7 +57,10 @@ Mã nguồn OpenKey để tham chiếu (đọc để hiểu lỗi, KHÔNG chép)
   - ✅ **Gõ tắt phụ âm + viết hoa đầu câu** — `Telex.fold` thêm 2 nhánh có cổng: start (`cells.isEmpty`: f→ph/j→gi/w→qu) và end (`cells.last.isVowel`: g→ng/h→nh/k→ch); `Engine.finalize` viết hoa chữ đầu câu (dùng lại `atSentenceStart`, cả nhánh restore). 3 cờ `EngineConfig` mặc định tắt. Xem `DECISIONS.md`.
   - ✅ **Toggle hệ thống** — `runAtLogin` (`SMAppService.mainApp` + reconcile khi khởi động + revert khi lỗi), `showDockIcon` (`setActivationPolicy`), `openControlPanelAtLaunch` (mở qua `openWindowRequest` đăng ký từ `MenuBarLabel`). `checkForUpdates` để dormant (Phase 5).
   - ✅ **Onboarding** — `App/OnboardingView.swift` (cửa sổ "Chào mừng", 2 thẻ quyền, dùng lại state + poll 1.5s của `AppModel`), tự mở khi `needsOnboarding`, mở lại từ menu "Hướng dẫn cấp quyền…". `Permissions` thêm request/mở-cài-đặt Input Monitoring.
-  - ⬜ **Còn (không chặn — vẫn scaffolding `// TODO: wire`):** `switchKeyModifier` (phím chuyển — cần đăng ký global hotkey), `checkForUpdates` (bộ kiểm tra thật — Phase 5/Sparkle), `spellCheck`, `allowFreeToneMark`, `autoFixSuggestion`, `sendEachKeystroke`.
+  - ✅ **Phím chuyển** (`switchKeyModifier`) — tổ hợp phím (mặc định ⌃⇧, hoặc "Tắt") nhấn-thả sạch để bật/tắt tiếng Việt; `SwitchKeyDetector` thuần + NSEvent monitor **ngoài** hot-path tap. Chỉ báo **V/E** trên menu bar.
+  - ✅ **Bỏ dấu tự do** (`allowFreeToneMark`) — cổng cho việc đặt dấu không sát chữ (mặc định BẬT = như cũ; TẮT = ép sát chữ).
+  - ✅ **Gửi từng phím** (`sendEachKeystroke`) + **Sửa lỗi gợi ý** (`autoFixSuggestion`, gõ keyDown-only) — qua `InputBehavior` đẩy vào `EventTapController` (đọc snapshot 1 lần/edit). autoFixSuggestion mặc định TẮT (giữ nguyên hành vi tap, opt-in).
+  - ⬜ **Còn (không chặn — vẫn scaffolding):** `checkForUpdates` (bộ kiểm tra thật — Phase 5/Sparkle); `spellCheck` (trùng ý với `restoreIfInvalid` sẵn có — cần chốt ngữ nghĩa trước khi nối kẻo thành no-op).
 
 ## ⚠️ [VERIFY] Phase 2 — phải đo trên macOS thật (chưa test được ở đây)
 1. **Cấp quyền xong có cần khởi động lại app?** Nếu `AXIsProcessTrusted()` = true nhưng `CGEvent.tapCreate` vẫn nil → cần relaunch. App hiện log lỗi + poll; nên thêm nút "Khởi động lại" nếu gặp.

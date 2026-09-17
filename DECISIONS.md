@@ -516,3 +516,49 @@ The `MenuBarExtra` label shows a bold **`V`** while Vietnamese input is on and
 **`E`** while it's off, instead of an icon — the current mode is readable at a
 glance and is the immediate visual feedback for the "Phím chuyển" toggle above.
 Driven by `AppModel.enabled` (see `MenuBarLabel` in `KeystoneApp.swift`).
+
+## Input-layer compatibility toggles (Phase 4)
+
+`sendEachKeystroke` and `autoFixSuggestion` ("Hệ thống" tab) moved from
+persistence-only scaffolding to real behavior in `EventTapController`'s
+posting path — the CGEventTap output side, this project's most
+stability-critical code.
+
+**`InputBehavior` snapshot, same lock/snapshot pattern as `EngineController`.**
+`Contracts.swift` gained a plain `InputBehavior` value type
+(`sendEachKeystroke`, `textOnKeyDownOnly`). `EventTapController` holds one
+behind an `OSAllocatedUnfairLock` (`behaviorLock`) and exposes
+`updateBehavior(_:)`; `AppModel.pushInputBehavior()` calls it — mirroring
+exactly how `pushConfig()` pushes `EngineConfig` into `EngineController` —
+from `bootstrap()` and from both toggles' `didSet`s, after persisting. The
+tap's `handle(...)` reads the snapshot **once per edit** (`behaviorLock
+.withLock { behavior }`), not once per raw keystroke that passes through
+untouched, so the added hot-path cost is exactly one cheap lock acquire on
+edits the engine already decided to act on — the same cost class as the
+existing `EngineController` config lock.
+
+**`sendEachKeystroke` ("Gửi từng phím") → per-grapheme `postText`.**
+`KeystrokeExecutor.execute` gained an `eachGrapheme: Bool = false` parameter:
+when true, it calls `sink.postText(String(ch))` once per Swift `Character`
+in the result text instead of one `postText(wholeString)` call, after the
+same single `postBackspace(count:)` as before. Helps apps that mishandle
+multi-char Unicode insertions. Default off, matching `AppModel`'s existing
+default.
+
+**`autoFixSuggestion` ("Sửa lỗi gợi ý") → keyDown-only Unicode posting.**
+`TapSink.postText` now takes `textOnKeyDownOnly: Bool`. When true, the synthesized Unicode string is set on the keyDown event only —
+the keyUp is still posted (tagged with `selfTag`, flags cleared) but carries
+no string. When false, both events carry the string, matching the tap's
+original behavior. This is the documented remedy for browsers/Excel doubling
+synthesized text. It defaults **OFF**, so the tap's default posting is
+UNCHANGED (both events, as before) — turning it on is an opt-in switch to
+keyDown-only. When enabling it, verify on real browsers/Excel/Terminal — see
+HANDOFF.md [VERIFY] #2 for the double-char background. `postBackspace` and the
+self-tag/flags logic are unchanged.
+
+**Integration-only, except the executor's per-grapheme split.** Same
+reasoning as the tap and the `NSWorkspace`/`NSEvent` wiring elsewhere in this
+file: the live keyDown-only posting needs a real synthetic `CGEvent` pair and
+a real target app to observe, so it isn't unit-tested. The per-grapheme split
+lives in the pure `KeystrokeExecutor` and is covered by
+`Tests/KeystoneInputTests/ExecutorTests.swift` against the fake `EventSink`.

@@ -25,9 +25,10 @@ Keystone (app)  (SwiftUI) — MenuBarExtra · Bảng điều khiển · Gõ tắ
   - ✅ **Gõ tắt phụ âm + viết hoa đầu câu — XONG:** `f→ph, j→gi, w→qu` (đầu từ), `g→ng, h→nh, k→ch` (sau nguyên âm), tự viết hoa chữ đầu câu — đều tắt mặc định, corpus giữ nguyên byte.
   - ✅ **Toggle hệ thống — XONG (cần nghiệm thu máy thật):** khởi động cùng macOS (`SMAppService`), hiện Dock icon, mở Bảng điều khiển khi khởi động.
   - ✅ **Onboarding — XONG (cần nghiệm thu máy thật):** cửa sổ "Chào mừng" hướng dẫn cấp quyền Accessibility (bắt buộc) + Input Monitoring (khuyến nghị), tự mở lần đầu.
-  - ⬜ **Còn (không chặn):** vài toggle phụ chưa nối (Kiểm tra chính tả, Cho phép bỏ dấu tự do, Sửa lỗi gợi ý, Gửi từng phím, Phím chuyển) + kiểm tra bản mới thật.
+  - ✅ **Phím chuyển + chỉ báo V/E:** tổ hợp phím (mặc định ⌃⇧) bật/tắt tiếng Việt; menu bar hiện **V/E**. Cùng: bỏ dấu tự do, gửi từng phím, sửa lỗi gợi ý (keyDown-only, opt-in) đã nối.
+  - ⬜ **Còn (không chặn):** kiểm tra bản mới thật (Phase 5/Sparkle); `spellCheck` (trùng ý `restoreIfInvalid`, chờ chốt ngữ nghĩa).
   - **Phase 5** (ký/notarize/DMG) đã có script (`Scripts/`), chờ tài khoản Apple.
-- Toàn bộ test **xanh**: **68 ca engine + 36 ca input**. Quyết định ở [`DECISIONS.md`](DECISIONS.md). Xem `HANDOFF.md`.
+- Toàn bộ test **xanh**: **84 ca engine + 46 ca input**. Quyết định ở [`DECISIONS.md`](DECISIONS.md). Xem `HANDOFF.md`.
 
 ```
 swift build && swift test   # engine + input phải luôn xanh
