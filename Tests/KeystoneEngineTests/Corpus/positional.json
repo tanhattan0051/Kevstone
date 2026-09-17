@@ -19,5 +19,20 @@
   { "name": "add stays English (d after vowel)", "keys": "add", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "add" },
   { "name": "uppercase Dangd -> Đang", "keys": "Dangd", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "Đang" },
   { "name": "dieendf -> điền (đ trigger at end + circumflex)", "keys": "dieendf", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "điền" },
-  { "name": "VNI dang9 -> đang", "keys": "dang9", "method": "vni", "orthography": "modern", "restoreIfInvalid": true, "expected": "đang" }
+  { "name": "VNI dang9 -> đang", "keys": "dang9", "method": "vni", "orthography": "modern", "restoreIfInvalid": true, "expected": "đang" },
+  { "name": "toiws -> tới (non-adjacent horn)", "keys": "toiws", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "tới" },
+  { "name": "moiws -> mới", "keys": "moiws", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "mới" },
+  { "name": "guiwr -> gửi", "keys": "guiwr", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "gửi" },
+  { "name": "chuiwr -> chửi", "keys": "chuiwr", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "chửi" },
+  { "name": "nguiwr -> ngửi", "keys": "nguiwr", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "ngửi" },
+  { "name": "VNI toi6 -> tôi", "keys": "toi6", "method": "vni", "orthography": "modern", "restoreIfInvalid": true, "expected": "tôi" },
+  { "name": "VNI roi62 -> rồi (non-adjacent circumflex)", "keys": "roi62", "method": "vni", "orthography": "modern", "restoreIfInvalid": true, "expected": "rồi" },
+  { "name": "VNI moi64 -> mỗi", "keys": "moi64", "method": "vni", "orthography": "modern", "restoreIfInvalid": true, "expected": "mỗi" },
+  { "name": "VNI loi64 -> lỗi", "keys": "loi64", "method": "vni", "orthography": "modern", "restoreIfInvalid": true, "expected": "lỗi" },
+  { "name": "VNI yeu6 -> yêu", "keys": "yeu6", "method": "vni", "orthography": "modern", "restoreIfInvalid": true, "expected": "yêu" },
+  { "name": "VNI yeu61 -> yếu", "keys": "yeu61", "method": "vni", "orthography": "modern", "restoreIfInvalid": true, "expected": "yếu" },
+  { "name": "VNI moi71 -> mới (non-adjacent horn)", "keys": "moi71", "method": "vni", "orthography": "modern", "restoreIfInvalid": true, "expected": "mới" },
+  { "name": "VNI gui73 -> gửi", "keys": "gui73", "method": "vni", "orthography": "modern", "restoreIfInvalid": true, "expected": "gửi" },
+  { "name": "VNI toi71 -> tới", "keys": "toi71", "method": "vni", "orthography": "modern", "restoreIfInvalid": true, "expected": "tới" },
+  { "name": "VNI ngui73 -> ngửi", "keys": "ngui73", "method": "vni", "orthography": "modern", "restoreIfInvalid": true, "expected": "ngửi" }
 ]

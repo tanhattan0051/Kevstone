@@ -126,6 +126,21 @@ enum Telex {
                     cells[vi].mark = .none   // revert → fall through to bare ư
                 }
             }
+            // Last vowel is an offglide (e/i/y) with no target of its own —
+            // search backward for an earlier eligible vowel (toiws→tới, guiwr→gửi).
+            if let hi = cells.lastIndex(where: {
+                $0.isVowel && $0.mark == .none && ($0.base == .a || $0.base == .o || $0.base == .u)
+            }) {
+                let isQuGlide = hi > 0 && !cells[hi - 1].isVowel && cells[hi - 1].consonant == "q"
+                if !isQuGlide {
+                    cells[hi].mark = (cells[hi].base == .a) ? .breve : .horn
+                    if SyllableOps.marksLegal(cells),
+                       Phonology.isNucleusPrefix(SyllableOps.vowelLetters(cells)) {
+                        return .mark(key: "w", targets: [hi])
+                    }
+                    cells[hi].mark = .none
+                }
+            }
             // bare w → insert ư
             cells.append(.vowel(.u, .horn, upper: up))
             return .mark(key: "w", targets: [cells.count - 1])

@@ -58,10 +58,15 @@ enum VNI {
                 for t in targets where t < cells.count { cells[t].mark = .none }
                 cells.append(.cons("6", upper: up)); return .literal
             }
-            if let vi = SyllableOps.lastVowelIndex(cells), cells[vi].mark == .none,
-               (cells[vi].base == .a || cells[vi].base == .e || cells[vi].base == .o) {
+            if let vi = cells.lastIndex(where: {
+                $0.isVowel && $0.mark == .none && ($0.base == .a || $0.base == .e || $0.base == .o)
+            }) {
+                let adjacent = vi == SyllableOps.lastVowelIndex(cells)
                 cells[vi].mark = .circumflex
-                if SyllableOps.marksLegal(cells) { return .mark(key: "6", targets: [vi]) }
+                if SyllableOps.marksLegal(cells),
+                   adjacent || Phonology.isNucleusPrefix(SyllableOps.vowelLetters(cells)) {
+                    return .mark(key: "6", targets: [vi])
+                }
                 cells[vi].mark = .none
             }
             cells.append(.cons("6", upper: up)); return .base
@@ -83,6 +88,21 @@ enum VNI {
                 if SyllableOps.marksLegal(cells) { return .mark(key: "7", targets: [vi]) }
                 cells[vi].mark = .none
             }
+            // Last vowel is an offglide with no target of its own — search
+            // backward for an earlier eligible vowel (moi71→mới, gui73→gửi).
+            if let hi = cells.lastIndex(where: {
+                $0.isVowel && $0.mark == .none && ($0.base == .o || $0.base == .u)
+            }) {
+                let isQuGlide = hi > 0 && !cells[hi - 1].isVowel && cells[hi - 1].consonant == "q"
+                if !isQuGlide {
+                    cells[hi].mark = .horn
+                    if SyllableOps.marksLegal(cells),
+                       Phonology.isNucleusPrefix(SyllableOps.vowelLetters(cells)) {
+                        return .mark(key: "7", targets: [hi])
+                    }
+                    cells[hi].mark = .none
+                }
+            }
             cells.append(.cons("7", upper: up)); return .base
         }
         // 8 = breve (a -> ă)
@@ -95,6 +115,16 @@ enum VNI {
                 cells[vi].mark = .breve
                 if SyllableOps.marksLegal(cells) { return .mark(key: "8", targets: [vi]) }
                 cells[vi].mark = .none
+            }
+            // Backward search for consistency with the 6/7 handlers (gated so
+            // it never misfires; no known corpus case currently relies on it).
+            if let ai = cells.lastIndex(where: { $0.isVowel && $0.mark == .none && $0.base == .a }) {
+                cells[ai].mark = .breve
+                if SyllableOps.marksLegal(cells),
+                   Phonology.isNucleusPrefix(SyllableOps.vowelLetters(cells)) {
+                    return .mark(key: "8", targets: [ai])
+                }
+                cells[ai].mark = .none
             }
             cells.append(.cons("8", upper: up)); return .base
         }
