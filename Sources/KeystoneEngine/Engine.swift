@@ -144,7 +144,9 @@ public final class Engine {
     private func interpret(_ keys: [Character]) -> Composition {
         switch config.inputMethod {
         case .vni: return VNI.fold(keys)
-        default:   return Telex.fold(keys, quickTelex: config.quickTelex)
+        default:   return Telex.fold(keys, quickTelex: config.quickTelex,
+                                      quickStartConsonant: config.quickStartConsonant,
+                                      quickEndConsonant: config.quickEndConsonant)
         }
     }
 
@@ -198,10 +200,22 @@ public final class Engine {
 
         let comp = downgradeOpenUoHorn(interpret(rawKeys))
         let table = outputTable(for: config.codeTable)
+        // Sentence auto-capitalize (Phase 4): applied at commit, to whichever
+        // branch actually wins below, on top of the already-decided isValid
+        // result — capitalization never changes validity (see DECISIONS.md).
+        let shouldCapitalize = config.autoCapitalize && atSentenceStart && !rawKeys.isEmpty
         let finalUnits: [UInt16]
         if config.restoreIfInvalid && !rawKeys.isEmpty && !isValid(comp) {
-            finalUnits = rawKeys.flatMap { table.plain($0) }   // revert to raw keystrokes
+            var keys = rawKeys
+            if shouldCapitalize, let first = keys.first {
+                keys[0] = Character(first.uppercased())
+            }
+            finalUnits = keys.flatMap { table.plain($0) }   // revert to raw keystrokes
         } else {
+            var comp = comp
+            if shouldCapitalize, !comp.cells.isEmpty, !comp.cells[0].isUpper {
+                comp.cells[0].isUpper = true
+            }
             finalUnits = encode(comp, table: table)
         }
         let common = commonPrefixCount(prevUnits, finalUnits)

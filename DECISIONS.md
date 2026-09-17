@@ -306,3 +306,67 @@ yet.
 (same reasoning as the CGEventTap and the `NSWorkspace` smart-switch wiring
 above) — verified by building and by manual exercise on a real Mac, not by
 new unit tests.
+
+## Quick consonants & auto-capitalize (Phase 4)
+
+Three more `EngineConfig` fields, all default OFF (dormant):
+`quickStartConsonant`, `quickEndConsonant`, `autoCapitalize`.
+
+**Start-shortcut is onset-only, and only on the word's first keystroke.**
+`f`, `j`, `w` already have Telex jobs (huyền, nặng, horn/bare-ư) that fire
+constantly mid-word — `quickStartConsonant` cannot simply reinterpret those
+keys everywhere without breaking existing tone/horn typing (`af`→`à` must
+keep working). So the shortcut is gated on `cells.isEmpty`: it only ever
+fires as the very first key of a fresh word (`f`→`ph`, `j`→`gi`, `w`→`qu`),
+checked at the very top of `Telex.apply`, before the tone-key branch. Casing
+rule: the first letter of the cluster takes the typed key's case, the rest is
+lowercase — this gives the natural `"Fa "`→`"Pha "`, `"Wa "`→`"Qua "`. A
+would-be all-caps cluster (holding shift through the whole shortcut trigger)
+isn't specially cased by this feature — that's an accepted rare edge, not a
+goal for v1.
+
+**End-shortcut fires only immediately after a vowel.** `g`, `h`, `k` are not
+tone/mark keys, so unlike the start-shortcut they always reach Telex's case 8
+("any other consonant") — but expanding them unconditionally would corrupt
+ordinary words: "tong" (t-o-n-g) must not become "tonng" just because it
+contains a trailing `g`. The fix is the same shape check either way: only
+expand when `cells.last?.isVowel == true`, i.e. the key lands right where the
+nucleus just closed (`"tog"`→`"tong"`, `"vih"`→`"vinh"`, `"bak"`→`"bach"`),
+never when a consonant already closed the coda (`"tong"` stays `"tong"`).
+This check lives inside case 8, before the existing `quickTelex` doubling
+block, so both features can coexist without one shadowing the other.
+
+**Test isolation note:** `EngineTogglesTests`'s end-consonant suite sets
+`restoreIfInvalid: false`. This isolates the per-key coda expansion from the
+separate whole-word phonotactic-validity restore layer (see "Restore-if-
+invalid: two layers" above) — e.g. a *ngang*-toned `"bach"` is rejected by
+Phonology's stop-coda tone restriction (§5.4: `p`/`t`/`c`/`ch` codas require
+sắc/nặng), so with `restoreIfInvalid` **on** (the real default) that
+particular expansion would actually revert to raw keystrokes at commit, same
+as any other stop-coda word typed without a sắc/nặng tone. That's expected,
+existing behavior of the restore layer, not a bug in the new shortcut.
+
+**Auto-capitalize is commit-time and reuses `atSentenceStart`.** `Engine`
+already tracked `atSentenceStart` for macro capitalization; `autoCapitalize`
+reuses the same flag instead of adding a second tracker. In `finalize`, when
+`config.autoCapitalize && atSentenceStart && !rawKeys.isEmpty`, the
+sentence-initial word's first letter is capitalized right before the edit is
+computed — on the un-capitalized `Composition` for the restore-if-invalid
+branch (uppercasing `rawKeys.first` before `table.plain`, so English words
+like `"hello"` also capitalize via the restore path) and on a local `var
+comp` for the normal render branch (`comp.cells[0].isUpper = true` before
+`encode`). `isValid(comp)` is evaluated on the *un-capitalized* composition
+first, since capitalization never changes phonotactic validity. An
+already-uppercase first letter is left alone. This only runs after the
+macro-hit branch has already returned, so a fired macro's own
+`autoCapitalize`/`macroAutoCapitalize` handling is untouched. Because the
+first letter's on-screen code unit changes, the commit diff naturally
+produces the backspace+retype that turns the lowercase-while-composing first
+letter into its capitalized form only once the word commits — so a
+sentence-initial word visibly shows lowercase while still being typed and
+flips to uppercase at commit. Accepted for v1.
+
+All three flags default OFF; `App/AppModel.swift`'s
+`quickStartConsonant`/`quickEndConsonant`/`autoCapitalize` properties (previously
+persistence-only scaffolding) now also call `pushConfig()` in their `didSet`,
+same pattern as `quickTelex`/`restoreIfInvalid`.

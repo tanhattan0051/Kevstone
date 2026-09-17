@@ -46,7 +46,10 @@ enum Telex {
     ]
 
     /// Fold the raw key list into a `Composition`.
-    static func fold(_ keys: [Character], quickTelex: Bool = false) -> Composition {
+    static func fold(
+        _ keys: [Character], quickTelex: Bool = false,
+        quickStartConsonant: Bool = false, quickEndConsonant: Bool = false
+    ) -> Composition {
         var cells: [Cell] = []
         var tone: Tone = .ngang
         var prevChar: Character = " "
@@ -57,7 +60,9 @@ enum Telex {
             let lo = Character(ch.lowercased())
             let effect = apply(lo, upper: up, prevChar: prevChar,
                                prevEffect: prevEffect, cells: &cells, tone: &tone,
-                               quickTelex: quickTelex)
+                               quickTelex: quickTelex,
+                               quickStartConsonant: quickStartConsonant,
+                               quickEndConsonant: quickEndConsonant)
             prevChar = lo
             prevEffect = effect
         }
@@ -70,8 +75,30 @@ enum Telex {
         _ lo: Character, upper up: Bool,
         prevChar: Character, prevEffect: Effect,
         cells: inout [Cell], tone: inout Tone,
-        quickTelex: Bool
+        quickTelex: Bool,
+        quickStartConsonant: Bool = false,
+        quickEndConsonant: Bool = false
     ) -> Effect {
+
+        // 0. Start-consonant shortcut (Telex "gõ tắt phụ âm đầu"), onset only.
+        // Fires ONLY when this is the word's very first keystroke (cells is
+        // still empty) — f/j/w otherwise mean huyền/nặng/horn, so this must
+        // run before any of that per-key logic.
+        if quickStartConsonant, cells.isEmpty {
+            switch lo {
+            case "f":
+                cells.append(.cons("p", upper: up)); cells.append(.cons("h", upper: false))
+                return .base
+            case "j":
+                cells.append(.cons("g", upper: up)); cells.append(.vowel(.i, .none, upper: false))
+                return .base
+            case "w":
+                cells.append(.cons("q", upper: up)); cells.append(.vowel(.u, .none, upper: false))
+                return .base
+            default:
+                break
+            }
+        }
 
         // 1. Tone keys s/f/r/x/j
         if let newTone = toneKeys[lo] {
@@ -231,6 +258,27 @@ enum Telex {
         }
 
         // 8. Any other consonant
+
+        // 8a. End-consonant shortcut ("gõ tắt phụ âm cuối"), coda only. Fires
+        // ONLY right after a vowel (the nucleus just closed) — this is what
+        // keeps ordinary words safe: "tong" (t-o-n-g) stays tong because that
+        // g follows "n", not a vowel, while "tog" (t-o-g) expands to "tong".
+        if quickEndConsonant, cells.last?.isVowel == true {
+            switch lo {
+            case "g":
+                cells.append(.cons("n", upper: up)); cells.append(.cons("g", upper: false))
+                return .base
+            case "h":
+                cells.append(.cons("n", upper: up)); cells.append(.cons("h", upper: false))
+                return .base
+            case "k":
+                cells.append(.cons("c", upper: up)); cells.append(.cons("h", upper: false))
+                return .base
+            default:
+                break
+            }
+        }
+
         if quickTelex, prevChar == lo,
            let last = cells.indices.last, !cells[last].isVowel,
            cells[last].consonant == lo, !cells[last].dStroke {

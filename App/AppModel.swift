@@ -6,7 +6,9 @@
 //
 // Two tiers of properties:
 //  - The "mapped" group (inputMethod, codeTable, orthography, quickTelex,
-//    restoreIfInvalid) is pushed into `EngineConfig` on every change and
+//    restoreIfInvalid, macrosEnabled, macrosExpandWhenVietnameseOff,
+//    macroAutoCapitalize, quickStartConsonant, quickEndConsonant,
+//    autoCapitalize) is pushed into `EngineConfig` on every change and
 //    reaches the running tap via `EngineController.updateConfig`.
 //  - Everything else is scaffolding: real UI, real persistence, but no
 //    engine behavior yet (`EngineConfig` doesn't have a field for it). Each
@@ -115,21 +117,27 @@ final class AppModel {
     }
 
     /// "Viết Hoa chữ cái đầu câu"
-    // TODO: wire to engine — sentence-initial auto-capitalize isn't implemented yet.
     var autoCapitalize: Bool = AppModel.loadBool(Keys.autoCapitalize, default: true) {
-        didSet { UserDefaults.standard.set(autoCapitalize, forKey: Keys.autoCapitalize) }
+        didSet {
+            UserDefaults.standard.set(autoCapitalize, forKey: Keys.autoCapitalize)
+            pushConfig()
+        }
     }
 
     /// "Gõ tắt phụ âm đầu: f→ph, j→gi, w→qu"
-    // TODO: wire to engine (Phase 3 Telex extensions).
     var quickStartConsonant: Bool = AppModel.loadBool(Keys.quickStartConsonant, default: false) {
-        didSet { UserDefaults.standard.set(quickStartConsonant, forKey: Keys.quickStartConsonant) }
+        didSet {
+            UserDefaults.standard.set(quickStartConsonant, forKey: Keys.quickStartConsonant)
+            pushConfig()
+        }
     }
 
     /// "Gõ tắt phụ âm cuối: g→ng, h→nh, k→ch"
-    // TODO: wire to engine (Phase 3 Telex extensions).
     var quickEndConsonant: Bool = AppModel.loadBool(Keys.quickEndConsonant, default: false) {
-        didSet { UserDefaults.standard.set(quickEndConsonant, forKey: Keys.quickEndConsonant) }
+        didSet {
+            UserDefaults.standard.set(quickEndConsonant, forKey: Keys.quickEndConsonant)
+            pushConfig()
+        }
     }
 
     /// "Chuyển chế độ thông minh" (smart switch on app change)
@@ -495,7 +503,10 @@ final class AppModel {
             macrosEnabled: macrosEnabled,
             macrosExpandWhenVietnameseOff: macrosExpandWhenVietnameseOff,
             macroAutoCapitalize: macroAutoCapitalize,
-            macros: MacroStore.shared.macros.map { $0.toRule() }
+            macros: MacroStore.shared.macros.map { $0.toRule() },
+            quickStartConsonant: quickStartConsonant,
+            quickEndConsonant: quickEndConsonant,
+            autoCapitalize: autoCapitalize
         ))
     }
 

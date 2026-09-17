@@ -110,6 +110,20 @@ public struct EngineConfig: Sendable, Equatable, Codable {
     public var macroAutoCapitalize: Bool
     /// The configured macro rules (see `MacroRule`/`MacroTable`).
     public var macros: [MacroRule]
+    /// "Gõ tắt phụ âm đầu" (Phase 4, Telex only): a lone f/j/w typed as the
+    /// word's very FIRST keystroke expands to its digraph onset (f→ph, j→gi,
+    /// w→qu) instead of its usual tone/horn duty. Off by default — see
+    /// DECISIONS.md "Quick consonants & auto-capitalize".
+    public var quickStartConsonant: Bool
+    /// "Gõ tắt phụ âm cuối" (Phase 4, Telex only): g/h/k typed immediately
+    /// after a vowel (closing the nucleus) expands to its digraph coda
+    /// (g→ng, h→nh, k→ch). Off by default.
+    public var quickEndConsonant: Bool
+    /// "Viết hoa đầu câu" (Phase 4): capitalizes the first letter of the word
+    /// committed at a sentence start, reusing `Engine`'s `atSentenceStart`
+    /// tracking. Off by default; distinct from `macroAutoCapitalize` (which
+    /// only affects macro expansions).
+    public var autoCapitalize: Bool
 
     public init(
         inputMethod: InputMethod = .telex,
@@ -120,7 +134,10 @@ public struct EngineConfig: Sendable, Equatable, Codable {
         macrosEnabled: Bool = false,
         macrosExpandWhenVietnameseOff: Bool = false,
         macroAutoCapitalize: Bool = true,
-        macros: [MacroRule] = []
+        macros: [MacroRule] = [],
+        quickStartConsonant: Bool = false,
+        quickEndConsonant: Bool = false,
+        autoCapitalize: Bool = false
     ) {
         self.inputMethod = inputMethod
         self.codeTable = codeTable
@@ -131,6 +148,9 @@ public struct EngineConfig: Sendable, Equatable, Codable {
         self.macrosExpandWhenVietnameseOff = macrosExpandWhenVietnameseOff
         self.macroAutoCapitalize = macroAutoCapitalize
         self.macros = macros
+        self.quickStartConsonant = quickStartConsonant
+        self.quickEndConsonant = quickEndConsonant
+        self.autoCapitalize = autoCapitalize
     }
 }
 
