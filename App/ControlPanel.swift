@@ -101,6 +101,9 @@ private struct BasicPane: View {
                 Picker("Phím chuyển:", selection: $model.switchKeyModifier) {
                     ForEach(SwitchKeyModifier.allCases) { Text($0.label).tag($0) }
                 }
+                Text("Nhấn tổ hợp phím này (không kèm phím khác) để bật/tắt tiếng Việt.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 Toggle("Gửi từng phím (bật nếu bị lỗi)", isOn: $model.sendEachKeystroke)
             }
         }

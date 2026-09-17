@@ -430,3 +430,78 @@ CGEventTap, `NSWorkspace` smart-switch wiring, and `SMAppService`/
 real permission dialog to exercise. Verified by `swift build` staying clean
 and by the existing engine/input suites staying green (68 + 36 tests) — no
 fabricated unit tests were added for this UI layer.
+
+## Phím chuyển / switch-language hotkey (Phase 4)
+
+Resolves the `switchKeyModifier` scaffolding left in the Phase 4 system-
+toggles work ("Phím chuyển:" picker with no hot key actually registered).
+
+**Modifier-only chord, detected via a pure `SwitchKeyDetector`.** OpenKey's
+"Phím chuyển" isn't a single key — it's a chord like Ctrl+Shift that toggles
+Vietnamese input when pressed and released *cleanly*, with no other key
+pressed in between. That "cleanly" requirement is the whole point: it's what
+lets `SwitchKeyDetector` tell a bare Ctrl+Shift tap apart from an ordinary
+shortcut like Ctrl+Shift+C, which must never toggle the input state. The
+detector is a tiny arm/cancel state machine (`Sources/KeystoneInput/
+SwitchKeyDetector.swift`): `flagsChanged(active:)` arms when the live
+modifier set exactly matches `target`, fires `true` only when the set then
+returns to empty while still armed and not cancelled, and `otherKeyPressed()`
+(fed from `.keyDown`) cancels an armed chord — so does any modifier joining
+the chord that isn't part of `target` (e.g. Command joining a Ctrl+Shift
+chord). Pinned by `Tests/KeystoneInputTests/SwitchKeyDetectorTests.swift`.
+
+**`ModifierSet`, not `NSEvent.ModifierFlags`, at the detector boundary.** The
+detector lives in `KeystoneInput`, which has no AppKit dependency and must
+stay unit-testable headless — same constraint as every other pure type in
+`Contracts.swift`. `App/AppModel.swift` maps `NSEvent.modifierFlags` to
+`ModifierSet` at the edge (`ModifierSet(nsEventFlags:)`), right next to the
+existing `SwitchKeyModifier.chord` mapping.
+
+**`NSEvent` global + local monitors, deliberately NOT the CGEventTap.** The
+tap is this project's most stability-critical code and this feature has no
+business anywhere near its hot path — a bug here must never be able to wedge
+every keystroke in every app. So "Phím chuyển" is wired entirely through
+AppKit `NSEvent.addGlobalMonitorForEvents`/`addLocalMonitorForEvents`
+(`matching: [.flagsChanged, .keyDown]`) in `AppModel.bootstrap()`/
+`shutdown()`, independent of `EventTapController`. The global monitor is what
+lets the chord fire while some other app is frontmost; like the tap, it needs
+Accessibility to see other apps' events, but unlike the tap its absence is
+harmless — the hot key just doesn't fire globally yet, no crash, no
+degraded typing. The local monitor covers Keystone's own windows and must
+return the event unmodified (`return event`) — this feature only ever reads
+modifier/key events, never consumes them.
+
+**Concurrency: extract-then-hop, same pattern as the app-activation
+observer.** `NSEvent` monitor closures fire on the main run loop but aren't
+statically `@MainActor`-isolated, and `NSEvent` itself isn't `Sendable`. Both
+monitors pull out only the two `Sendable` pieces they need (the `NSEvent
+.EventType` and a computed `ModifierSet`) synchronously in the closure, then
+hop via `Task { @MainActor in ... }` into one shared method,
+`handleSwitchKeyEvent(type:modifiers:)` — mirroring exactly how
+`bootstrap()`'s `NSWorkspace.didActivateApplicationNotification` observer
+already extracts a bundle ID before hopping actors. That method feeds
+`switchDetector` and calls `enabled.toggle()` on a fired chord.
+
+**`.off` disables it; default stays `.controlShift`.** `SwitchKeyModifier`
+gained an `.off` case (label "Tắt") so the picker can turn the hot key off
+entirely — `.off.chord` is `nil`, and `SwitchKeyDetector.flagsChanged`
+treats a `nil`/empty target as always-disabled (resets its state, always
+returns `false`). `.controlShift` remains the default, matching OpenKey and
+the easy V/E switching the design calls for.
+
+**Integration-only, not unit-testable headless.** Same reasoning as the tap
+and the `NSWorkspace` smart-switch wiring above: the live `NSEvent` monitors
+need a real running app and real system input events to exercise. Only the
+pure `SwitchKeyDetector` state machine is unit-tested; the monitor wiring in
+`AppModel` is verified by `swift build` staying clean and the existing
+engine/input suites staying green. The two `NSEvent` monitor closures run on
+the main thread and are handled **synchronously** (`MainActor.assumeIsolated`,
+not a `Task` hop) so the detector — an ordered state machine — never sees a
+cancelling `keyDown` reordered after the releasing `flagsChanged`.
+
+## Menu-bar mode indicator (V / E)
+
+The `MenuBarExtra` label shows a bold **`V`** while Vietnamese input is on and
+**`E`** while it's off, instead of an icon — the current mode is readable at a
+glance and is the immediate visual feedback for the "Phím chuyển" toggle above.
+Driven by `AppModel.enabled` (see `MenuBarLabel` in `KeystoneApp.swift`).

@@ -66,7 +66,10 @@ private struct MenuBarLabel: View {
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        Image(systemName: model.enabled ? "character.bubble.fill" : "character.bubble")
+        // "V" khi đang gõ tiếng Việt, "E" khi đang ở chế độ tiếng Anh — cho
+        // thấy ngay chế độ hiện tại ngay trên menu bar.
+        Text(model.enabled ? "V" : "E")
+            .font(.system(size: 14, weight: .bold, design: .rounded))
             .onAppear {
                 model.openWindowRequest = { id in openWindow(id: id) }
                 model.performLaunchOpenIfNeeded()

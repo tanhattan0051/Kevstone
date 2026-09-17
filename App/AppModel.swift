@@ -22,11 +22,12 @@ import ServiceManagement
 import KeystoneEngine
 import KeystoneInput
 
-/// OpenKey's "Phím chuyển" (switch-language hot key) is a modifier-only
-/// combo, not a single key. This is UI scaffolding only — no global hot key
-/// is registered yet.
+/// OpenKey's "Phím chuyển" (switch-language hot key): a modifier-only combo
+/// that toggles Vietnamese input on/off when pressed and released cleanly,
+/// with no other key in between (see `SwitchKeyDetector`). `.off` disables
+/// it entirely.
 enum SwitchKeyModifier: String, CaseIterable, Identifiable, Codable {
-    case controlShift, optionShift, commandShift, controlOption
+    case controlShift, optionShift, commandShift, controlOption, off
 
     var id: String { rawValue }
 
@@ -36,7 +37,31 @@ enum SwitchKeyModifier: String, CaseIterable, Identifiable, Codable {
         case .optionShift:  return "⌥ ⇧"
         case .commandShift: return "⌘ ⇧"
         case .controlOption: return "⌃ ⌥"
+        case .off: return "Tắt"
         }
+    }
+
+    /// The chord `SwitchKeyDetector` should watch for. `nil` disables it.
+    var chord: ModifierSet? {
+        switch self {
+        case .controlShift: return [.control, .shift]
+        case .optionShift:  return [.option, .shift]
+        case .commandShift: return [.command, .shift]
+        case .controlOption: return [.control, .option]
+        case .off: return nil
+        }
+    }
+}
+
+private extension ModifierSet {
+    /// Maps AppKit's modifier flags to the platform-neutral `ModifierSet`
+    /// that `SwitchKeyDetector` (KeystoneInput) works with.
+    init(nsEventFlags flags: NSEvent.ModifierFlags) {
+        self = []
+        if flags.contains(.control) { insert(.control) }
+        if flags.contains(.option) { insert(.option) }
+        if flags.contains(.shift) { insert(.shift) }
+        if flags.contains(.command) { insert(.command) }
     }
 }
 
@@ -165,9 +190,11 @@ final class AppModel {
     }
 
     /// "Phím chuyển:"
-    // TODO: wire to input layer — no global hot key is registered yet.
     var switchKeyModifier: SwitchKeyModifier = AppModel.loadRaw(Keys.switchKeyModifier, default: .controlShift) {
-        didSet { UserDefaults.standard.set(switchKeyModifier.rawValue, forKey: Keys.switchKeyModifier) }
+        didSet {
+            UserDefaults.standard.set(switchKeyModifier.rawValue, forKey: Keys.switchKeyModifier)
+            switchDetector.target = switchKeyModifier.chord
+        }
     }
 
     /// "Cho phép gõ tắt" (Gõ tắt tab)
@@ -282,6 +309,14 @@ final class AppModel {
     private var startAttempts = 0
     private var appSwitchObserver: NSObjectProtocol?
 
+    // MARK: - Phím chuyển (switch-language hot key, Phase 4)
+
+    /// Pure modifier-only chord detector — fed by the `NSEvent` monitors
+    /// below, deliberately off the CGEventTap hot path (see DECISIONS.md).
+    private var switchDetector = SwitchKeyDetector()
+    private var switchKeyGlobalMonitor: Any?
+    private var switchKeyLocalMonitor: Any?
+
     // MARK: - System toggle bookkeeping (Phase 4)
 
     /// Set while `runAtLogin` is being corrected programmatically (revert on
@@ -321,6 +356,8 @@ final class AppModel {
 
     func bootstrap() {
         reconcileLoginItemStatus()
+        switchDetector.target = switchKeyModifier.chord
+        installSwitchKeyMonitors()
         // Re-push EngineConfig whenever macros are added/edited/imported, so
         // the running tap picks up the new rules without a restart.
         MacroStore.shared.onChange = { [weak self] in self?.pushConfig() }
@@ -350,6 +387,8 @@ final class AppModel {
         tap.stop()
         statusTimer?.invalidate()
         if let o = appSwitchObserver { NSWorkspace.shared.notificationCenter.removeObserver(o) }
+        if let m = switchKeyGlobalMonitor { NSEvent.removeMonitor(m) }
+        if let m = switchKeyLocalMonitor { NSEvent.removeMonitor(m) }
     }
 
     func requestAccessibility() {
@@ -519,6 +558,48 @@ final class AppModel {
     private func persistPerAppStateIfNeeded() {
         guard !applyingPerAppState, perAppTrackingOn, let bundleID = currentBundleID else { return }
         PerAppStore.shared.remember(currentInputState, for: bundleID)
+    }
+
+    /// Installs the GLOBAL + LOCAL `NSEvent` monitors behind "Phím chuyển".
+    /// Deliberately AppKit monitors, not the CGEventTap: this hot key must
+    /// stay off the tap's hot path (see DECISIONS.md). The global monitor
+    /// needs Accessibility to observe other apps' events — already required
+    /// for the tap itself — so if it isn't granted yet the hot key simply
+    /// won't fire globally; nothing here crashes either way.
+    private func installSwitchKeyMonitors() {
+        // These monitors are delivered on the main thread, so handle them
+        // SYNCHRONOUSLY (assumeIsolated) rather than hopping through a Task:
+        // `SwitchKeyDetector` is an ordered state machine, and a Task hop
+        // could reorder a cancelling keyDown after the releasing flagsChanged
+        // and fire a spurious toggle. NSEvent isn't Sendable, so pull the
+        // plain data out before touching the main-actor detector.
+        switchKeyGlobalMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.flagsChanged, .keyDown]) { [weak self] event in
+            let type = event.type
+            let modifiers = ModifierSet(nsEventFlags: event.modifierFlags)
+            MainActor.assumeIsolated { self?.handleSwitchKeyEvent(type: type, modifiers: modifiers) }
+        }
+        switchKeyLocalMonitor = NSEvent.addLocalMonitorForEvents(matching: [.flagsChanged, .keyDown]) { [weak self] event in
+            let type = event.type
+            let modifiers = ModifierSet(nsEventFlags: event.modifierFlags)
+            MainActor.assumeIsolated { self?.handleSwitchKeyEvent(type: type, modifiers: modifiers) }
+            return event
+        }
+    }
+
+    /// Shared handler for both "Phím chuyển" monitors: feeds `switchDetector`
+    /// and flips `enabled` on a clean chord press-then-release.
+    @MainActor
+    private func handleSwitchKeyEvent(type: NSEvent.EventType, modifiers: ModifierSet) {
+        switch type {
+        case .flagsChanged:
+            if switchDetector.flagsChanged(active: modifiers) {
+                enabled.toggle()
+            }
+        case .keyDown:
+            switchDetector.otherKeyPressed()
+        default:
+            break
+        }
     }
 
     private func startTap() {
