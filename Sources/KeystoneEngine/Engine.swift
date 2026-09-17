@@ -38,9 +38,16 @@ public final class Engine {
     public func flush() -> EngineResult { finalize(boundary: nil) }
     public func reset() { rawKeys = []; prevUnits = [] }
 
+    private func interpret(_ keys: [Character]) -> Composition {
+        switch config.inputMethod {
+        case .vni: return VNI.fold(keys)
+        default:   return Telex.fold(keys)
+        }
+    }
+
     // append a word char or handle backspace: re-fold whole word, diff against on-screen
     private func rerender() -> EngineResult {
-        let comp = Telex.fold(rawKeys)
+        let comp = interpret(rawKeys)
         let newUnits = Array(render(comp).unicodeScalars)
         let r = diff(prevUnits, newUnits)
         prevUnits = newUnits
@@ -49,7 +56,7 @@ public final class Engine {
 
     // commit: apply restore-if-invalid, produce the edit that turns on-screen -> final (+ optional boundary char)
     private func finalize(boundary: Character?) -> EngineResult {
-        let comp = Telex.fold(rawKeys)
+        let comp = interpret(rawKeys)
         let finalString: String
         if config.restoreIfInvalid && !rawKeys.isEmpty && !isValid(comp) {
             finalString = String(rawKeys)           // revert to raw keystrokes
@@ -65,9 +72,15 @@ public final class Engine {
         return EngineResult(backspaceCount: bs, text: text)
     }
 
-    // A Telex word/transform character. Everything else is a commit boundary.
+    // A word/transform character for the active method. Everything else is a
+    // commit boundary. Telex uses letters + the [ ] direct keys; VNI uses
+    // letters + digits (its tone/mark keys), so digits must reach the fold.
     private func isWordChar(_ ch: Character) -> Bool {
-        ch.isLetter || ch == "[" || ch == "]"
+        if ch.isLetter { return true }
+        switch config.inputMethod {
+        case .vni: return ch.isNumber
+        default:   return ch == "[" || ch == "]"
+        }
     }
 
     private func commonPrefixCount(_ a: [Unicode.Scalar], _ b: [Unicode.Scalar]) -> Int {

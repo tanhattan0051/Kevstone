@@ -73,7 +73,7 @@ enum Telex {
 
         // 1. Tone keys s/f/r/x/j
         if let newTone = toneKeys[lo] {
-            guard hasVowel(cells) else {
+            guard SyllableOps.hasVowel(cells) else {
                 cells.append(.cons(lo, upper: up)); return .base
             }
             // double-strike: same tone key again clears the tone + emits literal
@@ -82,7 +82,7 @@ enum Telex {
                 cells.append(.cons(lo, upper: up))
                 return .literal
             }
-            let coda = currentCoda(cells)
+            let coda = SyllableOps.currentCoda(cells)
             if Phonology.toneAllowed(newTone, coda: coda) {
                 tone = newTone
                 return .toneKey(lo)
@@ -94,7 +94,7 @@ enum Telex {
 
         // 2. z — remove tone (default: does not strip quality marks)
         if lo == "z" {
-            if hasVowel(cells) && tone != .ngang {
+            if SyllableOps.hasVowel(cells) && tone != .ngang {
                 tone = .ngang
                 return .removeTone
             }
@@ -109,18 +109,18 @@ enum Telex {
                 cells.append(.cons("w", upper: up)); return .literal
             }
             // uo -> ươ (both horns)
-            if let (ui, oi) = adjacentUO(cells) {
+            if let (ui, oi) = SyllableOps.adjacentUO(cells) {
                 cells[ui].mark = .horn; cells[oi].mark = .horn
-                if marksLegal(cells) { return .mark(key: "w", targets: [ui, oi]) }
+                if SyllableOps.marksLegal(cells) { return .mark(key: "w", targets: [ui, oi]) }
                 cells[ui].mark = .none; cells[oi].mark = .none   // revert
             }
-            if let vi = lastVowelIndex(cells), cells[vi].mark == .none {
+            if let vi = SyllableOps.lastVowelIndex(cells), cells[vi].mark == .none {
                 let base = cells[vi].base
                 let target: VowelMark? = (base == .a) ? .breve
                     : (base == .o || base == .u) ? .horn : nil
                 if let m = target {
                     cells[vi].mark = m
-                    if marksLegal(cells) { return .mark(key: "w", targets: [vi]) }
+                    if SyllableOps.marksLegal(cells) { return .mark(key: "w", targets: [vi]) }
                     cells[vi].mark = .none   // revert → fall through to bare ư
                 }
             }
@@ -131,9 +131,9 @@ enum Telex {
 
         // 4. [ → ơ direct key
         if lo == "[" {
-            if let vi = lastVowelIndex(cells), cells[vi].base == .o, cells[vi].mark == .none {
+            if let vi = SyllableOps.lastVowelIndex(cells), cells[vi].base == .o, cells[vi].mark == .none {
                 cells[vi].mark = .horn
-                if marksLegal(cells) { return .mark(key: "[", targets: [vi]) }
+                if SyllableOps.marksLegal(cells) { return .mark(key: "[", targets: [vi]) }
                 cells[vi].mark = .none
             }
             cells.append(.vowel(.o, .horn, upper: up))
@@ -142,9 +142,9 @@ enum Telex {
 
         // 5. ] → ư direct key
         if lo == "]" {
-            if let vi = lastVowelIndex(cells), cells[vi].base == .u, cells[vi].mark == .none {
+            if let vi = SyllableOps.lastVowelIndex(cells), cells[vi].base == .u, cells[vi].mark == .none {
                 cells[vi].mark = .horn
-                if marksLegal(cells) { return .mark(key: "]", targets: [vi]) }
+                if SyllableOps.marksLegal(cells) { return .mark(key: "]", targets: [vi]) }
                 cells[vi].mark = .none
             }
             cells.append(.vowel(.u, .horn, upper: up))
@@ -170,7 +170,7 @@ enum Telex {
         if let bv = BaseVowel(lo) {
             // circumflex only for a/e/o
             let canCirc = (bv == .a || bv == .e || bv == .o)
-            if let vi = lastVowelIndex(cells), cells[vi].base == bv {
+            if let vi = SyllableOps.lastVowelIndex(cells), cells[vi].base == bv {
                 // double-strike undo: â + a → a a
                 if cells[vi].mark == .circumflex,
                    case .mark(let k, _) = prevEffect, k == lo {
@@ -180,7 +180,7 @@ enum Telex {
                 }
                 if canCirc, cells[vi].mark == .none {
                     cells[vi].mark = .circumflex
-                    if marksLegal(cells) { return .mark(key: lo, targets: [vi]) }
+                    if SyllableOps.marksLegal(cells) { return .mark(key: lo, targets: [vi]) }
                     cells[vi].mark = .none   // reject → literal base append
                 }
             }
@@ -191,53 +191,5 @@ enum Telex {
         // 8. Any other consonant
         cells.append(.cons(lo, upper: up))
         return .base
-    }
-
-    // MARK: - Helpers
-
-    private static func hasVowel(_ cells: [Cell]) -> Bool { cells.contains { $0.isVowel } }
-
-    private static func lastVowelIndex(_ cells: [Cell]) -> Int? {
-        cells.lastIndex { $0.isVowel }
-    }
-
-    /// Trailing consonant cells after the last vowel, as a lowercase string.
-    private static func currentCoda(_ cells: [Cell]) -> String {
-        guard let vi = lastVowelIndex(cells) else { return "" }
-        var s = ""
-        for c in cells[(vi + 1)...] where !c.isVowel {
-            s.append(c.dStroke ? "đ" : c.consonant)
-        }
-        return s
-    }
-
-    /// Indices of an adjacent u(base)+o(base) pair (mark none), for ươ formation.
-    private static func adjacentUO(_ cells: [Cell]) -> (Int, Int)? {
-        for i in cells.indices.dropLast() {
-            let a = cells[i], b = cells[i + 1]
-            if a.isVowel, b.isVowel, a.base == .u, b.base == .o,
-               a.mark == .none, b.mark == .none {
-                // A `qu`-glide u must stay `u` (qươ is impossible — q is always
-                // followed by u). Skip this pair so only the o gets the horn,
-                // yielding quơ/quở rather than a broken qươ.
-                let uIsQuGlide = i > 0 && !cells[i - 1].isVowel && cells[i - 1].consonant == "q"
-                if uIsQuGlide { continue }
-                return (i, i + 1)
-            }
-        }
-        return nil
-    }
-
-    /// At most one quality-marked vowel, unless they form the ươ pair.
-    private static func marksLegal(_ cells: [Cell]) -> Bool {
-        let marked = cells.enumerated().filter { $0.element.isVowel && $0.element.mark != .none }
-        if marked.count <= 1 { return true }
-        if marked.count == 2 {
-            let (i0, a) = marked[0], (i1, b) = marked[1]
-            if i1 - i0 == 1, a.base == .u, a.mark == .horn, b.base == .o, b.mark == .horn {
-                return true   // ươ
-            }
-        }
-        return false
     }
 }

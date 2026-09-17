@@ -18,7 +18,7 @@ Keystone (app)  (SwiftUI) — MenuBarExtra · Bảng điều khiển · Gõ tắ
 - ✅ **Thiết kế:** spec + danh mục lỗi + icon đã chốt.
 - ✅ **Phase 1 — Engine + bộ test (XONG):** `KeystoneEngine` (Swift thuần) — Telex, Unicode NFC, đặt dấu kiểu mới/cũ, `Syllable` fold, restore-if-invalid, backspace khôi phục dấu. Test **xanh**: 153 ca corpus + 12 property.
 - ✅ **Phase 2 — Tầng nhập + menu-bar (XONG, cần nghiệm thu máy thật):** `KeystoneInput` (CGEventTap chạy đúng cách: re-enable trong callback + watchdog 1.5s + self-tag chống đệ quy + không việc nặng trên hot path) + app menu-bar tối thiểu (`App/`). Logic executor/translator/EngineController có **22 unit test xanh**. Quyết định ở [`DECISIONS.md`](DECISIONS.md); CI ở [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
-- ⬜ **Tiếp theo — Phase 3:** VNI, Simple/Quick Telex, 4 bảng mã cũ; nâng bảng rime §5.3. Xem `HANDOFF.md`.
+- 🚧 **Phase 3 — Đang làm:** ✅ **VNI** (dùng chung lõi âm tiết với Telex; 33 ca corpus + 8 cặp differential Telex↔VNI xanh). ⬜ Còn: Simple/Quick Telex, 4 bảng mã cũ (TCVN3/VNI-Win/tổ hợp/CP1258), nâng bảng rime §5.3. Xem `HANDOFF.md`.
 
 ```
 swift build && swift test   # engine + input phải luôn xanh

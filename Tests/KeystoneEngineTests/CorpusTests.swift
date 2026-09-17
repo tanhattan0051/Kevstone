@@ -35,4 +35,7 @@ import Testing
     // horn, offglide+coda rime protection).
     @Test(arguments: CorpusLoader.load("regressions"))
     func regressions(_ c: CorpusCase) { #expect(Replayer.run(c) == c.expected, "keys=\(c.keys)") }
+
+    @Test(arguments: CorpusLoader.load("vni"))
+    func vni(_ c: CorpusCase) { #expect(Replayer.run(c) == c.expected, "keys=\(c.keys)") }
 }
