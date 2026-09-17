@@ -1,0 +1,299 @@
+// Updater.swift — self-contained auto-updater: pulls signed updates from
+// this app's GitHub Releases. No Sparkle, no Apple Developer account (see
+// DECISIONS.md "Auto-update (Phase 5, no Apple account)").
+//
+// The pure, unit-tested logic (SemVer, ReleaseInfo.parse, UpdateVerifier,
+// UpdateCheck) lives in Sources/KeystoneInput/UpdateCheck.swift. Everything
+// here is integration glue — URLSession, NSAlert, Process — and is not
+// unit-testable headless, same reasoning as the CGEventTap itself.
+//
+// SECURITY: an update is downloaded from the internet and then EXECUTED.
+// `downloadAndInstall` verifies it with the embedded Ed25519 public key
+// BEFORE it is ever unzipped-into-place or launched. That `guard
+// UpdateVerifier.isValid(...)` is the mandatory, non-bypassable gate for the
+// whole feature — see the comment at its call site below.
+
+import Foundation
+import AppKit
+import os
+import KeystoneInput
+
+@MainActor
+final class Updater {
+    static let shared = Updater()
+    private static let log = Logger(subsystem: "com.tanta.keystone", category: "Updater")
+
+    /// Hardcoded, case-sensitive repo — the only source this updater will
+    /// ever fetch from.
+    private static let latestReleaseAPIURL = URL(string: "https://api.github.com/repos/tanhattan0051/Kevstone/releases/latest")!
+
+    /// Embedded Ed25519 public key (base64, 32 raw bytes) used to verify
+    /// every downloaded update. There is no code path that installs an
+    /// update without passing `UpdateVerifier.isValid` against this key.
+    private static let embeddedPublicKeyBase64 = "MJ8bmdlgJFAYi+M4+Hm3g+phMGDE+lamYdN3DPuiuvA="
+
+    private init() {}
+
+    /// Entry point. Safe to call from a UI button (`userInitiated: true`) or
+    /// a silent background check at launch (`userInitiated: false`) — kicks
+    /// off its own `Task` and returns immediately either way.
+    func checkForUpdates(userInitiated: Bool) {
+        guard
+            let currentVersionString = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String,
+            SemVer(currentVersionString) != nil
+        else {
+            // Auto-update only makes sense for an installed .app — running
+            // via `swift run` has no meaningful CFBundleShortVersionString.
+            if userInitiated {
+                showAlert("Đang chạy bản dev (swift run) — không kiểm tra cập nhật được")
+            }
+            return
+        }
+
+        Task { [weak self] in
+            await self?.performCheck(currentVersion: currentVersionString, userInitiated: userInitiated)
+        }
+    }
+
+    private func performCheck(currentVersion: String, userInitiated: Bool) async {
+        var request = URLRequest(url: Self.latestReleaseAPIURL, timeoutInterval: 10)
+        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        request.setValue("Keystone/\(currentVersion)", forHTTPHeaderField: "User-Agent")
+
+        let data: Data
+        do {
+            let (responseData, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+                throw URLError(.badServerResponse)
+            }
+            data = responseData
+        } catch {
+            Self.log.error("Latest-release request failed: \(error.localizedDescription, privacy: .public)")
+            if userInitiated {
+                showAlert("Không kiểm tra được bản cập nhật", informativeText: error.localizedDescription)
+            }
+            return
+        }
+
+        guard let release = ReleaseInfo.parse(latestReleaseJSON: data) else {
+            Self.log.error("Latest-release response could not be parsed (missing tag/assets or malformed JSON)")
+            if userInitiated {
+                showAlert("Không kiểm tra được bản cập nhật", informativeText: "Không đọc được thông tin bản phát hành từ GitHub.")
+            }
+            return
+        }
+
+        guard UpdateCheck.shouldOffer(currentVersion: currentVersion, release: release) else {
+            if userInitiated {
+                showAlert("Bạn đang dùng bản mới nhất (v\(currentVersion))", style: .informational)
+            }
+            return
+        }
+
+        promptToInstall(release)
+    }
+
+    private func promptToInstall(_ release: ReleaseInfo) {
+        let alert = NSAlert()
+        alert.messageText = "Có bản mới v\(release.version). Cập nhật ngay?"
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "Cập nhật")
+        alert.addButton(withTitle: "Để sau")
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+
+        Task { [weak self] in
+            await self?.downloadAndInstall(release)
+        }
+    }
+
+    private func downloadAndInstall(_ info: ReleaseInfo) async {
+        let zipData: Data
+        let signatureBase64: String
+        do {
+            zipData = try await fetchData(from: info.zipURL, timeout: 120)
+            let signatureData = try await fetchData(from: info.signatureURL, timeout: 30)
+            guard let decoded = String(data: signatureData, encoding: .utf8) else {
+                throw URLError(.cannotDecodeContentData)
+            }
+            signatureBase64 = decoded.trimmingCharacters(in: .whitespacesAndNewlines)
+        } catch {
+            Self.log.error("Update download failed: \(error.localizedDescription, privacy: .public)")
+            showAlert("Tải bản cập nhật thất bại", informativeText: error.localizedDescription)
+            return
+        }
+
+        // MANDATORY SECURITY GATE — non-bypassable. A downloaded update is
+        // about to be unzipped-into-place and executed; it must never
+        // install without a valid Ed25519 signature under the embedded
+        // public key. Any failure here aborts and tells the user why.
+        guard UpdateVerifier.isValid(
+            zipData: zipData,
+            signatureBase64: signatureBase64,
+            publicKeyBase64: Self.embeddedPublicKeyBase64
+        ) else {
+            Self.log.error("Update signature verification FAILED — install aborted")
+            showAlert("Chữ ký bản cập nhật không hợp lệ — đã huỷ để an toàn")
+            return
+        }
+
+        do {
+            try installVerifiedUpdate(zipData: zipData)
+        } catch {
+            Self.log.error("Update install failed: \(error.localizedDescription, privacy: .public)")
+            showAlert("Cài đặt cập nhật thất bại", informativeText: error.localizedDescription)
+        }
+    }
+
+    private func fetchData(from url: URL, timeout: TimeInterval) async throws -> Data {
+        let request = URLRequest(url: url, timeoutInterval: timeout)
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            throw URLError(.badServerResponse)
+        }
+        return data
+    }
+
+    /// `zipData` has ALREADY passed `UpdateVerifier.isValid` by the time this
+    /// is called — never call this on unverified bytes.
+    private func installVerifiedUpdate(zipData: Data) throws {
+        let fm = FileManager.default
+        let workDir = fm.temporaryDirectory.appendingPathComponent("KeystoneUpdate-\(UUID().uuidString)", isDirectory: true)
+        try fm.createDirectory(at: workDir, withIntermediateDirectories: true)
+
+        let zipPath = workDir.appendingPathComponent("Keystone.zip")
+        do {
+            try zipData.write(to: zipPath)
+        } catch {
+            throw UpdaterError.cannotWriteTempFile(error.localizedDescription)
+        }
+
+        let extractDir = workDir.appendingPathComponent("extracted", isDirectory: true)
+        try fm.createDirectory(at: extractDir, withIntermediateDirectories: true)
+        try runProcess("/usr/bin/ditto", ["-x", "-k", zipPath.path, extractDir.path])
+
+        guard let extractedApp = try findKeystoneApp(in: extractDir) else {
+            throw UpdaterError.appNotFoundInDownload
+        }
+
+        try runProcess("/usr/bin/xattr", ["-dr", "com.apple.quarantine", extractedApp.path])
+
+        let currentBundleURL = Bundle.main.bundleURL
+        guard currentBundleURL.pathExtension == "app" else {
+            throw UpdaterError.currentBundleNotFound
+        }
+
+        try launchRelaunchHelper(newAppPath: extractedApp.path, currentBundlePath: currentBundleURL.path)
+
+        Self.log.info("Update verified and staged; quitting so the relaunch helper can swap the bundle")
+        AppModel.shared.quit()
+    }
+
+    private func findKeystoneApp(in directory: URL) throws -> URL? {
+        let contents = try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
+        return contents.first { $0.lastPathComponent == "Keystone.app" }
+    }
+
+    /// Writes a small shell script that waits for THIS process to exit (a
+    /// running app bundle can't overwrite itself), then swaps the bundle in
+    /// place and reopens it — and launches it detached via `Process` so it
+    /// keeps running after this process quits.
+    private func launchRelaunchHelper(newAppPath: String, currentBundlePath: String) throws {
+        let fm = FileManager.default
+        let scriptURL = fm.temporaryDirectory.appendingPathComponent("keystone-relaunch-\(UUID().uuidString).sh")
+        let pid = ProcessInfo.processInfo.processIdentifier
+
+        // Every path is quoted (single-quote escaping) even though these
+        // come from Bundle.main / the verified zip, not attacker input — a
+        // stray space must never break the script.
+        let script = """
+        #!/bin/bash
+        while kill -0 \(pid) 2>/dev/null; do
+            sleep 0.2
+        done
+        rm -rf \(shellQuoted(currentBundlePath))
+        ditto \(shellQuoted(newAppPath)) \(shellQuoted(currentBundlePath))
+        open \(shellQuoted(currentBundlePath))
+        """
+
+        do {
+            try script.write(to: scriptURL, atomically: true, encoding: .utf8)
+            try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptURL.path)
+        } catch {
+            throw UpdaterError.cannotWriteTempFile(error.localizedDescription)
+        }
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/bash")
+        process.arguments = [scriptURL.path]
+        do {
+            try process.run()
+        } catch {
+            throw UpdaterError.processLaunchFailed("/bin/bash", error.localizedDescription)
+        }
+    }
+
+    private func shellQuoted(_ path: String) -> String {
+        "'" + path.replacingOccurrences(of: "'", with: "'\\''") + "'"
+    }
+
+    @discardableResult
+    private func runProcess(_ executablePath: String, _ arguments: [String]) throws -> String {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: executablePath)
+        process.arguments = arguments
+        let outputPipe = Pipe()
+        process.standardOutput = outputPipe
+        process.standardError = outputPipe
+
+        do {
+            try process.run()
+        } catch {
+            throw UpdaterError.processLaunchFailed(executablePath, error.localizedDescription)
+        }
+        process.waitUntilExit()
+
+        let outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
+        let output = String(data: outputData, encoding: .utf8) ?? ""
+        guard process.terminationStatus == 0 else {
+            Self.log.error("\(executablePath, privacy: .public) exited \(process.terminationStatus): \(output, privacy: .public)")
+            throw UpdaterError.processExitedNonZero(executablePath, process.terminationStatus, output)
+        }
+        return output
+    }
+
+    private func showAlert(_ messageText: String, informativeText: String? = nil, style: NSAlert.Style = .warning) {
+        let alert = NSAlert()
+        alert.messageText = messageText
+        if let informativeText {
+            alert.informativeText = informativeText
+        }
+        alert.alertStyle = style
+        alert.runModal()
+    }
+}
+
+private enum UpdaterError: LocalizedError {
+    case cannotWriteTempFile(String)
+    case processLaunchFailed(String, String)
+    case processExitedNonZero(String, Int32, String)
+    case appNotFoundInDownload
+    case currentBundleNotFound
+
+    var errorDescription: String? {
+        switch self {
+        case .cannotWriteTempFile(let reason):
+            return "Không ghi được file tạm: \(reason)"
+        case .processLaunchFailed(let command, let reason):
+            return "Không chạy được lệnh \(command): \(reason)"
+        case .processExitedNonZero(let command, let code, let output):
+            let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty
+                ? "Lệnh \(command) thất bại (mã \(code))"
+                : "Lệnh \(command) thất bại (mã \(code)): \(trimmed)"
+        case .appNotFoundInDownload:
+            return "Không tìm thấy Keystone.app trong bản tải về"
+        case .currentBundleNotFound:
+            return "Không xác định được vị trí ứng dụng Keystone hiện tại"
+        }
+    }
+}

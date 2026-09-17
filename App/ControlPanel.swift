@@ -215,7 +215,7 @@ private struct AboutPane: View {
             Section("Keystone") {
                 LabeledContent("Phiên bản", value: versionString)
                 Button("Kiểm tra bản mới") {
-                    // TODO: wire to an update checker (design spec Open Q #9).
+                    Updater.shared.checkForUpdates(userInitiated: true)
                 }
             }
             Section {

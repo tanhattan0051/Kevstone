@@ -6,3 +6,8 @@ build/
 .build/
 dist/
 *.dmg
+
+# Update-signing private key — NEVER commit (real copy lives in ~/.config/keystone)
+*ed25519_private*
+*.p8
+signing-key*

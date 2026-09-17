@@ -89,7 +89,14 @@ final class AppModel {
 
     // MARK: - Mapped group — pushed into EngineConfig
 
-    var codeTable: CodeTable = AppModel.loadRaw(Keys.codeTable, default: .unicode) {
+    /// Output code table. App default is **Unicode tổ hợp** (`.unicodeCompound`,
+    /// combining diacritics) per the author's preference. Note the tradeoff:
+    /// NFC precomposed (`.unicode`) is 1 code-unit per grapheme and is the
+    /// most double-char/backspace-safe across apps (design spec E.2/E.3), so
+    /// if an app mishandles combining marks, switch back in the Control Panel.
+    /// `EngineConfig.codeTable` still defaults `.unicode` so the corpus keeps
+    /// pinning the precomposed bytes.
+    var codeTable: CodeTable = AppModel.loadRaw(Keys.codeTable, default: .unicodeCompound) {
         didSet {
             UserDefaults.standard.set(codeTable.rawValue, forKey: Keys.codeTable)
             pushConfig()
@@ -295,7 +302,6 @@ final class AppModel {
     }
 
     /// "Kiểm tra bản mới khi khởi động"
-    // TODO: wire to an update checker (design spec Open Q #9 — Sparkle vs bespoke, Phase 5).
     var checkForUpdates: Bool = AppModel.loadBool(Keys.checkForUpdates, default: true) {
         didSet { UserDefaults.standard.set(checkForUpdates, forKey: Keys.checkForUpdates) }
     }
@@ -412,6 +418,12 @@ final class AppModel {
         // while the app is up.
         statusTimer = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.refresh() }
+        }
+        // "Kiểm tra bản mới khi khởi động" — a silent background check, off
+        // the launch path (never blocks bootstrap()). Errors/no-update cases
+        // stay silent; only an actual newer release prompts the user.
+        if checkForUpdates {
+            Task { @MainActor in Updater.shared.checkForUpdates(userInitiated: false) }
         }
     }
 

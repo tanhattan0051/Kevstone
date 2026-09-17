@@ -1,0 +1,165 @@
+// UpdateCheck.swift — pure, testable core of the self-contained auto-updater
+// (Phase 5, no Sparkle / no Apple Developer account). See DECISIONS.md
+// "Auto-update (Phase 5, no Apple account)" for the full design.
+//
+// Everything in this file is a pure value type or a pure function: no
+// networking, no filesystem, no `Bundle.main`. The app-layer glue that calls
+// this (URLSession fetch, `NSAlert` prompts, unzip/relaunch via `Process`)
+// lives in App/Updater.swift and is integration-only, same reasoning as the
+// CGEventTap itself — see the existing "Integration-only" notes elsewhere in
+// DECISIONS.md.
+
+import Foundation
+import CryptoKit
+
+/// A parsed `MAJOR.MINOR.PATCH` version, e.g. from a GitHub release tag
+/// (`vMAJOR.MINOR.PATCH`) or `CFBundleShortVersionString`.
+public struct SemVer: Comparable, Equatable, CustomStringConvertible, Sendable {
+    public let major: Int
+    public let minor: Int
+    public let patch: Int
+
+    public init(major: Int, minor: Int, patch: Int) {
+        self.major = major
+        self.minor = minor
+        self.patch = patch
+    }
+
+    /// Parses a string that may have a leading `v`/`V` ("v1.2.3" or
+    /// "1.2.3"). Any pre-release/build-metadata suffix ("-beta.1",
+    /// "+build.5") is dropped gracefully rather than rejected. Returns `nil`
+    /// for anything that isn't exactly three non-negative integer
+    /// components — never crashes on malformed input.
+    public init?(_ s: String) {
+        var body = s
+        if body.hasPrefix("v") || body.hasPrefix("V") {
+            body.removeFirst()
+        }
+        if let suffixStart = body.firstIndex(where: { $0 == "-" || $0 == "+" }) {
+            body = String(body[body.startIndex..<suffixStart])
+        }
+
+        let parts = body.split(separator: ".", omittingEmptySubsequences: false)
+        guard parts.count == 3 else { return nil }
+        guard
+            let major = Int(parts[0]), major >= 0,
+            let minor = Int(parts[1]), minor >= 0,
+            let patch = Int(parts[2]), patch >= 0
+        else { return nil }
+
+        self.major = major
+        self.minor = minor
+        self.patch = patch
+    }
+
+    public var description: String { "\(major).\(minor).\(patch)" }
+
+    public static func < (lhs: SemVer, rhs: SemVer) -> Bool {
+        (lhs.major, lhs.minor, lhs.patch) < (rhs.major, rhs.minor, rhs.patch)
+    }
+}
+
+/// The pieces of a GitHub "latest release" response the updater needs:
+/// the version it's tagged with, and the two asset URLs it must download.
+public struct ReleaseInfo: Equatable, Sendable {
+    public let version: SemVer
+    public let zipURL: URL
+    public let signatureURL: URL
+
+    public init(version: SemVer, zipURL: URL, signatureURL: URL) {
+        self.version = version
+        self.zipURL = zipURL
+        self.signatureURL = signatureURL
+    }
+
+    private struct GitHubAsset: Decodable {
+        let name: String
+        let browserDownloadURL: String
+
+        private enum CodingKeys: String, CodingKey {
+            case name
+            case browserDownloadURL = "browser_download_url"
+        }
+    }
+
+    private struct GitHubRelease: Decodable {
+        let tagName: String
+        let assets: [GitHubAsset]
+
+        private enum CodingKeys: String, CodingKey {
+            case tagName = "tag_name"
+            case assets
+        }
+    }
+
+    /// Decodes a GitHub "latest release" API response. Requires a
+    /// `Keystone.zip` asset AND a `Keystone.zip.sig` asset AND a parseable
+    /// `tag_name` — missing or malformed input (including JSON that doesn't
+    /// even parse) returns `nil` rather than crashing, per the boundary rule:
+    /// validate everything that comes from the network before trusting it.
+    /// Also rejects any asset URL that isn't `https://` — this app only ever
+    /// fetches updates over HTTPS, so a scheme downgrade (however unlikely
+    /// from the real GitHub API) is treated the same as a missing asset.
+    public static func parse(latestReleaseJSON data: Data) -> ReleaseInfo? {
+        guard let release = try? JSONDecoder().decode(GitHubRelease.self, from: data) else {
+            return nil
+        }
+        guard let version = SemVer(release.tagName) else { return nil }
+        guard
+            let zipAsset = release.assets.first(where: { $0.name == "Keystone.zip" }),
+            let sigAsset = release.assets.first(where: { $0.name == "Keystone.zip.sig" }),
+            let zipURL = URL(string: zipAsset.browserDownloadURL),
+            let signatureURL = URL(string: sigAsset.browserDownloadURL),
+            zipURL.scheme == "https",
+            signatureURL.scheme == "https"
+        else {
+            return nil
+        }
+        return ReleaseInfo(version: version, zipURL: zipURL, signatureURL: signatureURL)
+    }
+}
+
+/// Verifies a downloaded update against the embedded Ed25519 public key.
+/// This is the mandatory, non-bypassable security gate for the whole
+/// feature: an update is downloaded from the internet and then executed, so
+/// it MUST be verified before it is ever unzipped-into-place or launched.
+/// See App/Updater.swift's `downloadAndInstall` for the call site — the
+/// `guard UpdateVerifier.isValid(...) else { abort }` there is what this
+/// type exists to make possible.
+public enum UpdateVerifier {
+    /// Returns whether `signatureBase64` is a valid Ed25519 signature of
+    /// `zipData` under `publicKeyBase64`. Any decode failure (bad base64,
+    /// wrong-length key, corrupt signature) returns `false` — this never
+    /// throws into the caller, so a malformed or missing signature always
+    /// reads as "not verified" rather than crashing the updater.
+    public static func isValid(zipData: Data, signatureBase64: String, publicKeyBase64: String) -> Bool {
+        guard
+            let signature = Data(base64Encoded: signatureBase64),
+            let keyBytes = Data(base64Encoded: publicKeyBase64)
+        else {
+            return false
+        }
+        guard let publicKey = try? Curve25519.Signing.PublicKey(rawRepresentation: keyBytes) else {
+            return false
+        }
+        return publicKey.isValidSignature(signature, for: zipData)
+    }
+}
+
+/// Version-comparison helpers the app layer uses to decide whether to
+/// prompt for an update.
+public enum UpdateCheck {
+    public static func isNewer(_ candidate: SemVer, than current: SemVer) -> Bool {
+        candidate > current
+    }
+
+    /// Given the running app's version string (from
+    /// `CFBundleShortVersionString`) and the parsed latest release, decides
+    /// whether the app should offer to update. A `currentVersion` that fails
+    /// to parse is treated as "don't offer" — safer than assuming every
+    /// release is newer than a version we couldn't even read.
+    public static func shouldOffer(currentVersion: String, release: ReleaseInfo) -> Bool {
+        guard let current = SemVer(currentVersion) else { return false }
+        return isNewer(release.version, than: current)
+    }
+}

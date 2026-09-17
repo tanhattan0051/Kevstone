@@ -33,6 +33,10 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 APP_NAME="Keystone"
 BUNDLE_ID="com.tanta.keystone"
 SCHEME_TARGET="Keystone"   # SPM executable product name (Package.swift)
+# Version stamped into the bundle's Info.plist. The auto-updater compares this
+# (CFBundleShortVersionString) against the latest GitHub Release — bump it per
+# release: `KEYSTONE_VERSION=1.0.1 Scripts/build_app.sh` (or via release.sh).
+VERSION="${KEYSTONE_VERSION:-1.0.0}"
 
 OUTPUT_DIR="${1:-${OUTPUT_DIR:-${REPO_ROOT}/dist}}"
 APP_BUNDLE="${OUTPUT_DIR}/${APP_NAME}.app"
@@ -100,12 +104,20 @@ if [[ -x "${PLIST_BUDDY}" ]]; then
         fi
     }
 
+    # Set (create if missing) a string key to an exact value.
+    set_key() {
+        local key="$1" value="$2"
+        "${PLIST_BUDDY}" -c "Set :${key} ${value}" "${DEST_PLIST}" 2>/dev/null \
+            || "${PLIST_BUDDY}" -c "Add :${key} string ${value}" "${DEST_PLIST}"
+    }
+
     add_if_missing "CFBundleExecutable"        string "${APP_NAME}"
     add_if_missing "CFBundlePackageType"       string "APPL"
     add_if_missing "CFBundleIdentifier"        string "${BUNDLE_ID}"
-    add_if_missing "CFBundleShortVersionString" string "1.0"
-    add_if_missing "CFBundleVersion"           string "1"
     add_if_missing "CFBundleIconFile"          string "AppIcon"
+    # Version is authoritative per build (drives the auto-updater), so always Set.
+    set_key "CFBundleShortVersionString" "${VERSION}"
+    set_key "CFBundleVersion"            "${VERSION}"
 else
     echo "warning: /usr/libexec/PlistBuddy not found; Info.plist copied as-is." >&2
     echo "         Make sure it already sets CFBundleExecutable/CFBundlePackageType/CFBundleIconFile." >&2

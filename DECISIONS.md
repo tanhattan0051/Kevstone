@@ -668,3 +668,95 @@ file: the live keyDown-only posting needs a real synthetic `CGEvent` pair and
 a real target app to observe, so it isn't unit-tested. The per-grapheme split
 lives in the pure `KeystrokeExecutor` and is covered by
 `Tests/KeystoneInputTests/ExecutorTests.swift` against the fake `EventSink`.
+
+## Auto-update (Phase 5, no Apple account)
+
+Keystone ships a self-contained auto-updater instead of Sparkle: no Apple
+Developer account, no third-party update framework, just GitHub Releases plus
+an Ed25519 signature Keystone verifies itself.
+
+**Source: GitHub Releases on `tanhattan0051/Kevstone`, nothing else.** The
+updater only ever calls the hardcoded, HTTPS
+`https://api.github.com/repos/tanhattan0051/Kevstone/releases/latest`
+endpoint, and only ever downloads the two asset URLs *that exact response*
+returns — it never follows an update URL from anywhere else (not a web page,
+not user input, not a redirect to a different repo). Each release publishes
+exactly two assets: `Keystone.zip` (a zipped `Keystone.app`) and
+`Keystone.zip.sig` (base64 of the Ed25519 signature of `Keystone.zip`'s raw
+bytes). The release tag must be `vMAJOR.MINOR.PATCH` (e.g. `v1.0.1`).
+
+**Mandatory Ed25519 verification before install — no bypass.** An update is
+downloaded from the internet and then executed, so signature verification is
+the actual security boundary of this feature, not a nice-to-have. The public
+key (`MJ8bmdlgJFAYi+M4+Hm3g+phMGDE+lamYdN3DPuiuvA=`, base64, 32 raw bytes) is
+embedded in the app. `App/Updater.swift`'s `downloadAndInstall` calls `guard
+UpdateVerifier.isValid(zipData:signatureBase64:publicKeyBase64:) else { abort
+}` — a `Keystone.zip` that fails verification, or a missing/unreadable
+`.sig` asset, is **never** unzipped-into-place or launched; the user sees
+"Chữ ký bản cập nhật không hợp lệ — đã huỷ để an toàn" and nothing else
+happens. `UpdateVerifier` (`Sources/KeystoneInput/UpdateCheck.swift`) decodes
+both base64 inputs defensively and returns `false` on any decode failure
+rather than throwing — a malformed signature or key always reads as "not
+verified". `Tests/KeystoneInputTests/UpdateCheckTests.swift` proves the gate
+actually rejects bad input with a real round-trip: it generates a
+`Curve25519.Signing.PrivateKey`, signs bytes, and asserts `isValid` accepts
+the genuine (data, signature, public key) triple but rejects tampered data, a
+wrong public key, and garbage base64.
+
+**Pure core vs. app-layer glue, same split as the rest of KeystoneInput.**
+`Sources/KeystoneInput/UpdateCheck.swift` holds everything unit-testable:
+`SemVer` (parses `vMAJOR.MINOR.PATCH`, tolerates a missing leading `v` and a
+pre-release/build suffix, `Comparable` by (major, minor, patch));
+`ReleaseInfo.parse(latestReleaseJSON:)` (decodes the GitHub API JSON,
+requiring both assets, a parseable tag, and `https://` asset URLs — anything
+else, including JSON that doesn't even parse, returns `nil` rather than
+crashing); `UpdateVerifier.isValid` (the signature gate above); and
+`UpdateCheck.shouldOffer(currentVersion:release:)` (a `currentVersion` that
+fails to parse is treated as "don't offer" — safer than assuming every
+release is newer than a version we couldn't even read). `App/Updater.swift`
+(`@MainActor final class Updater`, singleton `shared`) is the integration
+glue on top — `URLSession` fetches, `NSAlert` prompts, `Process` calls — and
+is not unit-tested headless, same reasoning as the CGEventTap itself.
+
+**Install: strip quarantine, then swap the bundle via a wait-for-exit
+relaunch helper.** Once the zip is verified, `Updater` writes it to a temp
+dir, extracts with `ditto -x -k` (via `Process`, failures surfaced, never
+swallowed), locates `Keystone.app` inside, and runs `xattr -dr
+com.apple.quarantine` on it. A running app bundle can't overwrite itself, so
+`Updater` writes a small shell script to a temp file that (a) polls `kill -0
+<pid>` until this process has exited, (b) `rm -rf` the current bundle path
+(`Bundle.main.bundleURL`), (c) `ditto`s the verified new app into place, (d)
+`open`s it — launches that script detached via `Process`, then calls
+`AppModel.shared.quit()`. Every path is quoted with POSIX single-quote
+escaping before going into the script, even though these come from
+`Bundle.main`/the verified zip rather than attacker input.
+
+**Current version from `CFBundleShortVersionString`; dev builds skip
+auto-install.** `checkForUpdates(userInitiated:)` reads
+`Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString")`; a
+`swift run` build has no meaningful value there, so a missing/unparseable
+version silently returns for a background check and shows "Đang chạy bản dev
+(swift run) — không kiểm tra cập nhật được" for a user-initiated one — either
+way, no network call and no install ever happens for a dev build. A silent
+background check (`checkForUpdates(userInitiated: false)`) is kicked off
+from `AppModel.bootstrap()` when the persisted "Kiểm tra bản mới khi khởi
+động" toggle is on; network/parse errors are logged and swallowed rather than
+surfaced, so a flaky connection at launch never nags the user. The "Kiểm tra
+bản mới" button in the About pane calls the same entry point with
+`userInitiated: true`, surfacing every outcome (error, already up to date,
+or the update prompt) as an alert.
+
+**The Ed25519 private key never enters the repo.** It's kept at
+`~/.config/keystone/ed25519_private.b64` on the machine that cuts releases
+and is used only by the release tooling that signs `Keystone.zip` before
+uploading it as a GitHub Release asset — the app only ever embeds and uses
+the matching *public* key.
+
+**Standing limitation: still one Gatekeeper prompt, and Accessibility may
+need re-granting.** Without Apple notarization, the very first manual
+install of Keystone.app still triggers Gatekeeper's "unidentified developer"
+prompt once, exactly like today. And unless the app is signed with a stable
+self-signed certificate, macOS may treat the swapped-in bundle as a
+different app for TCC purposes, so Accessibility (and Input Monitoring) can
+require re-granting after an update — the same class of issue
+`AppModel.needsRelaunch` already surfaces for a fresh Accessibility grant.
