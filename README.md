@@ -196,34 +196,6 @@ ngược cho TCVN3 / VNI-Windows · bộ kiểm tra bản mới thật (Sparkle)
 
 ---
 
-## Tài liệu
-
-- 📄 **Thiết kế đầy đủ:** [`docs/superpowers/specs/2026-09-16-keystone-design.md`](docs/superpowers/specs/2026-09-16-keystone-design.md)
-- 🧭 **Bắt đầu từ đâu:** [`HANDOFF.md`](HANDOFF.md)
-- 🧩 **Các quyết định kỹ thuật:** [`DECISIONS.md`](DECISIONS.md)
-- 🎨 **Icon & tài sản thiết kế:** [`Design/`](Design/)
-
----
-
-## Đóng góp
-
-Rất hoan nghênh issue và pull request. Vài quy ước:
-
-- `swift test` phải **luôn xanh** — logic engine đi kèm test (ưu tiên viết test trước).
-- Logic nghiệp vụ (parse/đặt dấu/chính tả) đặt ở tầng `KeystoneEngine` dưới dạng hàm thuần, không nhét
-  vào tầng nhập / UI.
-- Tính năng mới nên **ship dormant** (mặc định tắt) rồi bật khi cấu hình đủ.
-
-Build & chạy thử tại máy (dành cho người phát triển):
-
-```bash
-git clone https://github.com/tanhattan0051/Kevstone.git && cd Kevstone
-swift build && swift test     # engine + tầng nhập phải luôn xanh
-swift run Keystone            # chạy app menu-bar để thử
-```
-
----
-
 ## Giấy phép
 
 Phát hành theo giấy phép **MIT** — xem [`LICENSE`](LICENSE).
@@ -236,5 +208,4 @@ Bản quyền © 2026 **Tạ Nhật Tân**.
 ## Lời cảm ơn
 
 Cảm ơn [**OpenKey**](https://github.com/tuyenvm/OpenKey) của Tuyen Mai — nguồn cảm hứng và là tham
-chiếu quý giá về những lỗi thực tế mà một bộ gõ tiếng Việt cần tránh. Keystone được viết
-**clean-room** (không sử dụng mã nguồn của OpenKey) nhằm tạo một sản phẩm độc lập với giấy phép riêng.
+chiếu quý giá về những lỗi thực tế mà một bộ gõ tiếng Việt cần tránh.
