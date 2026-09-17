@@ -12,5 +12,12 @@
   { "name": "khoai unaffected", "keys": "khoais", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "khoái" },
   { "name": "quoc adjacent circumflex", "keys": "quoocs", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "quốc" },
   { "name": "loanword xoong via ooo", "keys": "xooong", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "xoong" },
-  { "name": "cao no circumflex", "keys": "caof", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "cào" }
+  { "name": "cao no circumflex", "keys": "caof", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "cào" },
+  { "name": "dangd -> đang (đ trigger at end)", "keys": "dangd", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "đang" },
+  { "name": "dadng -> đang (đ trigger mid-word)", "keys": "dadng", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "đang" },
+  { "name": "ddang adjacent đ control", "keys": "ddang", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "đang" },
+  { "name": "add stays English (d after vowel)", "keys": "add", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "add" },
+  { "name": "uppercase Dangd -> Đang", "keys": "Dangd", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "Đang" },
+  { "name": "dieendf -> điền (đ trigger at end + circumflex)", "keys": "dieendf", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "điền" },
+  { "name": "VNI dang9 -> đang", "keys": "dang9", "method": "vni", "orthography": "modern", "restoreIfInvalid": true, "expected": "đang" }
 ]

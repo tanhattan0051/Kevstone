@@ -160,10 +160,9 @@ enum Telex {
                 cells.append(.cons("d", upper: up))
                 return .literal
             }
-            if let last = cells.indices.last,
-               !cells[last].isVowel, cells[last].consonant == "d", !cells[last].dStroke {
-                cells[last].dStroke = true               // dd → đ
-                return .dstroke(index: last)
+            if let di = SyllableOps.onsetDIndex(cells) {  // dd / dangd / dadng → đ on the onset d
+                cells[di].dStroke = true
+                return .dstroke(index: di)
             }
             cells.append(.cons("d", upper: up)); return .base
         }

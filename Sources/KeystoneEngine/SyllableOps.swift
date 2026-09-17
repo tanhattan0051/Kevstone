@@ -47,6 +47,19 @@ enum SyllableOps {
         String(cells.compactMap { $0.isVowel ? NFC.qualityLetter($0.base, $0.mark) : nil })
     }
 
+    /// The index of an onset `d` (a plain d consonant with no vowel before it,
+    /// not yet đ) — the target for a đ-stroke whether the trigger key is adjacent
+    /// (dd), later in the word (dangd), or mid-word (dadng). Vietnamese đ is only
+    /// ever an onset, so a `d` that follows a vowel (e.g. English "add") is left
+    /// literal.
+    static func onsetDIndex(_ cells: [Cell]) -> Int? {
+        guard let di = cells.firstIndex(where: {
+            !$0.isVowel && $0.consonant == "d" && !$0.dStroke
+        }) else { return nil }
+        if cells[..<di].contains(where: { $0.isVowel }) { return nil }
+        return di
+    }
+
     /// At most one quality-marked vowel, unless they form the ươ pair.
     static func marksLegal(_ cells: [Cell]) -> Bool {
         let marked = cells.enumerated().filter { $0.element.isVowel && $0.element.mark != .none }

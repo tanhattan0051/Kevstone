@@ -103,8 +103,8 @@ enum VNI {
             if case .dstroke(let idx) = prevEffect, idx < cells.count {
                 cells[idx].dStroke = false; cells.append(.cons("9", upper: up)); return .literal
             }
-            if let last = cells.indices.last, !cells[last].isVowel, cells[last].consonant == "d", !cells[last].dStroke {
-                cells[last].dStroke = true; return .dstroke(index: last)
+            if let di = SyllableOps.onsetDIndex(cells) {  // d9 / dang9 → đ on the onset d
+                cells[di].dStroke = true; return .dstroke(index: di)
             }
             cells.append(.cons("9", upper: up)); return .base
         }
