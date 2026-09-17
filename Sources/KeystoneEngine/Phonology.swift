@@ -79,6 +79,15 @@ enum Phonology {
 
     static func isLegalNucleus(_ nucleus: String) -> Bool { nuclei.contains(nucleus) }
 
+    /// Is `s` the start of (or a whole) legal nucleus? Used to decide whether a
+    /// repeated vowel letter is a new nucleus vowel or a (possibly non-adjacent)
+    /// circumflex signal — e.g. "oi"+"o" = "oio" is not a prefix (so the o is a
+    /// mark → rồi), while "oa"+"o" = "oao" is a real triphthong (so append → ngoáo).
+    static func isNucleusPrefix(_ s: String) -> Bool {
+        if s.isEmpty { return true }
+        return nuclei.contains { $0.hasPrefix(s) }
+    }
+
     // MARK: Nucleus × coda legality (§5.3)
 
     /// Nuclei that end in a semivowel offglide and therefore CANNOT take a true

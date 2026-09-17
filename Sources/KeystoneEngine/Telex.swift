@@ -170,22 +170,38 @@ enum Telex {
 
         // 7. Vowel letters a/e/i/o/u/y
         if let bv = BaseVowel(lo) {
-            // circumflex only for a/e/o
-            let canCirc = (bv == .a || bv == .e || bv == .o)
-            if let vi = SyllableOps.lastVowelIndex(cells), cells[vi].base == bv {
-                // double-strike undo: â + a → a a
-                if cells[vi].mark == .circumflex,
-                   case .mark(let k, _) = prevEffect, k == lo {
-                    cells[vi].mark = .none
-                    cells.append(.vowel(bv, .none, upper: up))
-                    return .literal
-                }
-                if canCirc, cells[vi].mark == .none {
-                    cells[vi].mark = .circumflex
-                    if SyllableOps.marksLegal(cells) { return .mark(key: lo, targets: [vi]) }
-                    cells[vi].mark = .none   // reject → literal base append
+            let canCirc = (bv == .a || bv == .e || bv == .o)   // circumflex only for a/e/o
+
+            // Double-strike undo: the same circumflex key again removes the mark
+            // (on whichever vowel it landed on) and emits a literal base vowel.
+            if canCirc, case .mark(let k, let targets) = prevEffect, k == lo,
+               let ti = targets.first, ti < cells.count,
+               cells[ti].isVowel, cells[ti].base == bv, cells[ti].mark == .circumflex {
+                cells[ti].mark = .none
+                cells.append(.vowel(bv, .none, upper: up))
+                return .literal
+            }
+
+            if canCirc,
+               let ei = cells.lastIndex(where: { $0.isVowel && $0.base == bv && $0.mark == .none }) {
+                // Apply circumflex to the nearest matching unmarked vowel when
+                // either it's the immediately-preceding vowel (adjacent double:
+                // oo→ô, aa→â, ee→ê) OR treating this key as a *new* nucleus vowel
+                // would not form a legal nucleus (so the user meant a mark, even
+                // non-adjacently: roiof→rồi, loiox→lỗi). Real triphthongs whose
+                // append stays legal (ngoaos→ngoáo) fall through and append.
+                let adjacent = ei == SyllableOps.lastVowelIndex(cells)
+                let appended = SyllableOps.vowelLetters(cells) + String(bv.letter)
+                if adjacent || !Phonology.isNucleusPrefix(appended) {
+                    cells[ei].mark = .circumflex
+                    if SyllableOps.marksLegal(cells),
+                       adjacent || Phonology.isNucleusPrefix(SyllableOps.vowelLetters(cells)) {
+                        return .mark(key: lo, targets: [ei])
+                    }
+                    cells[ei].mark = .none   // reject → fall through to append
                 }
             }
+
             cells.append(.vowel(bv, .none, upper: up))
             return .base
         }

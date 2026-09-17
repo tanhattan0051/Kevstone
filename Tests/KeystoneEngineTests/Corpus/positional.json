@@ -1,0 +1,16 @@
+[
+  { "name": "roiof -> rồi (non-adjacent circumflex)", "keys": "roiof", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "rồi" },
+  { "name": "loiox -> lỗi", "keys": "loiox", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "lỗi" },
+  { "name": "toio -> tôi", "keys": "toio", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "tôi" },
+  { "name": "moio -> môi", "keys": "moio", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "môi" },
+  { "name": "doiox -> dỗi", "keys": "doiox", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "dỗi" },
+  { "name": "noio -> nôi", "keys": "noio", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "nôi" },
+  { "name": "adjacent rooif control", "keys": "rooif", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "rồi" },
+  { "name": "adjacent looix control", "keys": "looix", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "lỗi" },
+  { "name": "triphthong ngoaos stays ngoáo", "keys": "ngoaos", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "ngoáo" },
+  { "name": "triphthong ngoeor stays ngoẻo", "keys": "ngoeor", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "ngoẻo" },
+  { "name": "khoai unaffected", "keys": "khoais", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "khoái" },
+  { "name": "quoc adjacent circumflex", "keys": "quoocs", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "quốc" },
+  { "name": "loanword xoong via ooo", "keys": "xooong", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "xoong" },
+  { "name": "cao no circumflex", "keys": "caof", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "cào" }
+]

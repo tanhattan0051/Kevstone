@@ -40,6 +40,13 @@ enum SyllableOps {
         return nil
     }
 
+    /// The vowel cells, in order, as their written (quality-marked) letters —
+    /// e.g. cells for "roio" → "oio", after circumflex → "ôi". Used to decide
+    /// whether a repeated vowel is a new nucleus vowel or a circumflex signal.
+    static func vowelLetters(_ cells: [Cell]) -> String {
+        String(cells.compactMap { $0.isVowel ? NFC.qualityLetter($0.base, $0.mark) : nil })
+    }
+
     /// At most one quality-marked vowel, unless they form the ươ pair.
     static func marksLegal(_ cells: [Cell]) -> Bool {
         let marked = cells.enumerated().filter { $0.element.isVowel && $0.element.mark != .none }
