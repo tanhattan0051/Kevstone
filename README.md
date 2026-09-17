@@ -47,10 +47,6 @@ Cùng với **self-tag** chống xử lý lại chính event mình sinh ra, **kh
 (tap chạy trên thread + run loop riêng, tách khỏi UI), và truy cập engine an toàn đa luồng qua
 `OSAllocatedUnfairLock`. Đây là những gì làm nên khác biệt của Keystone so với bộ gõ cũ.
 
-> **Clean-room, bản quyền của bạn.** Engine tiếng Việt được **viết mới từ đầu**, không đọc/chép mã
-> nguồn của bất kỳ bộ gõ nào — nhờ vậy Keystone thuộc bản quyền tác giả và phát hành theo giấy phép
-> **MIT** thoải mái.
-
 ---
 
 ## Tính năng
