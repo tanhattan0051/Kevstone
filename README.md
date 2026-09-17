@@ -120,36 +120,24 @@ cập nhật, hiển thị) · **Thông tin**. Kèm cửa sổ **Công cụ chuy
 
 ## Cài đặt
 
-### Build từ mã nguồn *(hiện tại)*
+Tải bản mới nhất ở trang **[Releases](https://github.com/tanhattan0051/Kevstone/releases/latest)** rồi
+làm theo 4 bước:
 
-Yêu cầu Swift 6 toolchain (Xcode 16+). Bản dựng từ mã nguồn hiện tại chạy từ **macOS 14 trở lên**.
+1. Tải file **`Keystone-<phiên bản>.dmg`**.
+2. Mở file DMG vừa tải, **kéo `Keystone.app` vào thư mục `Applications`**.
+3. Mở **Keystone** từ Launchpad hoặc thư mục Applications.
+4. Khi được hỏi, **cấp quyền Accessibility** (bắt buộc — xem [Cấp quyền](#cấp-quyền-hệ-thống)), rồi
+   bật/tắt tiếng Việt bằng chỉ báo **V/E** trên menu bar hoặc phím **⌃⇧**.
 
-```bash
-git clone https://github.com/tanhattan0051/Kevstone.git
-cd Kevstone
-swift build && swift test     # engine + tầng nhập phải luôn xanh
-swift run Keystone            # chạy app menu-bar, cấp quyền Accessibility khi được hỏi
-```
-
-> 🎯 **Mục tiêu bản phát hành (Phase 5):** app đóng gói sẽ nhắm **macOS 26/27** với giao diện Liquid
-> Glass. Hiện tại UI dùng vật liệu SwiftUI chuẩn và deployment target là macOS 14.
-
-> ⚠️ Gõ tiếng Việt ở mọi ứng dụng **chỉ hoạt động trên macOS thật đã cấp quyền Accessibility**.
-> Sau `swift run Keystone`, cấp quyền rồi thử gõ ở TextEdit / Notes / Safari.
-
-### Đóng gói `.app` / DMG *(cần tài khoản Apple Developer)*
-
-Bộ script trong [`Scripts/`](Scripts/) dựng app, ký Developer ID, đóng DMG và notarize:
-
-```bash
-Scripts/build_app.sh                          # dựng Keystone.app (mặc định ./dist)
-Scripts/sign.sh      dist/Keystone.app        # cần APPLE_DEV_ID_NAME + APPLE_TEAM_ID
-Scripts/make_dmg.sh  dist/Keystone.app dist/Keystone.dmg
-Scripts/notarize.sh  dist/Keystone.dmg        # cần profile keychain KEYSTONE_NOTARY
-```
-
-Pipeline này cũng chạy tự động qua GitHub Actions khi push tag `v*` (nếu đã cấu hình đủ secret
-Apple). Bản DMG ký + notarize chính thức sẽ có ở mục **Releases** khi tài khoản Apple sẵn sàng.
+> ⚠️ **Bản hiện tại chưa ký (unsigned).** Lần đầu mở, macOS báo *"không xác minh được nhà phát
+> triển"* → **chuột phải vào `Keystone.app` → Open** (bấm **Open** lần nữa). Nếu vẫn bị chặn, mở
+> **Terminal** và chạy:
+>
+> ```bash
+> xattr -dr com.apple.quarantine /Applications/Keystone.app
+> ```
+>
+> Yêu cầu: **macOS 14 trở lên**. Bản ký + notarize chính thức (mở là chạy luôn) sẽ có ở các release sau.
 
 ---
 
@@ -225,6 +213,14 @@ Rất hoan nghênh issue và pull request. Vài quy ước:
 - Logic nghiệp vụ (parse/đặt dấu/chính tả) đặt ở tầng `KeystoneEngine` dưới dạng hàm thuần, không nhét
   vào tầng nhập / UI.
 - Tính năng mới nên **ship dormant** (mặc định tắt) rồi bật khi cấu hình đủ.
+
+Build & chạy thử tại máy (dành cho người phát triển):
+
+```bash
+git clone https://github.com/tanhattan0051/Kevstone.git && cd Kevstone
+swift build && swift test     # engine + tầng nhập phải luôn xanh
+swift run Keystone            # chạy app menu-bar để thử
+```
 
 ---
 
