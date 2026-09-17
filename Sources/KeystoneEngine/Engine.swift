@@ -143,10 +143,11 @@ public final class Engine {
 
     private func interpret(_ keys: [Character]) -> Composition {
         switch config.inputMethod {
-        case .vni: return VNI.fold(keys)
+        case .vni: return VNI.fold(keys, allowFreeToneMark: config.allowFreeToneMark)
         default:   return Telex.fold(keys, quickTelex: config.quickTelex,
                                       quickStartConsonant: config.quickStartConsonant,
-                                      quickEndConsonant: config.quickEndConsonant)
+                                      quickEndConsonant: config.quickEndConsonant,
+                                      allowFreeToneMark: config.allowFreeToneMark)
         }
     }
 

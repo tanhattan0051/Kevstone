@@ -20,7 +20,7 @@ enum VNI {
     }
     private static let tones: [Character: Tone] = ["1": .sac, "2": .huyen, "3": .hoi, "4": .nga, "5": .nang]
 
-    static func fold(_ keys: [Character]) -> Composition {
+    static func fold(_ keys: [Character], allowFreeToneMark: Bool = true) -> Composition {
         var cells: [Cell] = []
         var tone: Tone = .ngang
         var prevChar: Character = " "
@@ -28,14 +28,16 @@ enum VNI {
         for ch in keys {
             let up = ch.isUppercase
             let lo = Character(ch.lowercased())
-            let e = apply(lo, upper: up, prevChar: prevChar, prevEffect: prevEffect, cells: &cells, tone: &tone)
+            let e = apply(lo, upper: up, prevChar: prevChar, prevEffect: prevEffect, cells: &cells, tone: &tone,
+                          allowFreeToneMark: allowFreeToneMark)
             prevChar = lo; prevEffect = e
         }
         return Composition(cells: cells, tone: tone)
     }
 
     private static func apply(_ lo: Character, upper up: Bool, prevChar: Character, prevEffect: Effect,
-                              cells: inout [Cell], tone: inout Tone) -> Effect {
+                              cells: inout [Cell], tone: inout Tone,
+                              allowFreeToneMark: Bool = true) -> Effect {
         // Tone digits 1..5
         if let newTone = tones[lo] {
             guard SyllableOps.hasVowel(cells) else { cells.append(.cons(lo, upper: up)); return .base }
@@ -64,7 +66,7 @@ enum VNI {
                 let adjacent = vi == SyllableOps.lastVowelIndex(cells)
                 cells[vi].mark = .circumflex
                 if SyllableOps.marksLegal(cells),
-                   adjacent || Phonology.isNucleusPrefix(SyllableOps.vowelLetters(cells)) {
+                   adjacent || (allowFreeToneMark && Phonology.isNucleusPrefix(SyllableOps.vowelLetters(cells))) {
                     return .mark(key: "6", targets: [vi])
                 }
                 cells[vi].mark = .none
@@ -90,7 +92,8 @@ enum VNI {
             }
             // Last vowel is an offglide with no target of its own — search
             // backward for an earlier eligible vowel (moi71→mới, gui73→gửi).
-            if let hi = cells.lastIndex(where: {
+            // Non-adjacent by construction, so gated by allowFreeToneMark.
+            if allowFreeToneMark, let hi = cells.lastIndex(where: {
                 $0.isVowel && $0.mark == .none && ($0.base == .o || $0.base == .u)
             }) {
                 let isQuGlide = hi > 0 && !cells[hi - 1].isVowel && cells[hi - 1].consonant == "q"
@@ -118,7 +121,8 @@ enum VNI {
             }
             // Backward search for consistency with the 6/7 handlers (gated so
             // it never misfires; no known corpus case currently relies on it).
-            if let ai = cells.lastIndex(where: { $0.isVowel && $0.mark == .none && $0.base == .a }) {
+            // Non-adjacent by construction, so also gated by allowFreeToneMark.
+            if allowFreeToneMark, let ai = cells.lastIndex(where: { $0.isVowel && $0.mark == .none && $0.base == .a }) {
                 cells[ai].mark = .breve
                 if SyllableOps.marksLegal(cells),
                    Phonology.isNucleusPrefix(SyllableOps.vowelLetters(cells)) {
@@ -134,9 +138,12 @@ enum VNI {
                 cells[idx].dStroke = false; cells.append(.cons("9", upper: up)); return .literal
             }
             if let di = SyllableOps.onsetDIndex(cells) {  // d9 / dang9 → đ on the onset d
-                // Adjacent (d then 9) or a closed syllable only — mirrors Telex đ.
+                // Adjacent (d then 9) or a closed syllable only — mirrors Telex
+                // đ. The closed-syllable branch is non-adjacent and gated by
+                // allowFreeToneMark.
                 let adjacent = di == cells.count - 1
-                if adjacent || !SyllableOps.currentCoda(cells).isEmpty {
+                let closedSyllable = !SyllableOps.currentCoda(cells).isEmpty
+                if adjacent || (allowFreeToneMark && closedSyllable) {
                     cells[di].dStroke = true; return .dstroke(index: di)
                 }
             }

@@ -47,6 +47,17 @@ vowel would form an illegal nucleus (gated by `isNucleusPrefix`), so real
 triphthongs (`ngoaos`→ngoáo) and English words (`add`) are left alone. đ only
 ever strokes an onset d. Implemented for Telex (aa/ee/oo, w, dd) and VNI (6/7/8/9).
 
+`EngineConfig.allowFreeToneMark` ("Cho phép bỏ dấu tự do") gates this
+non-adjacent placement specifically. **Default: `true`** — preserves the
+above behavior and the full corpus. When `false`, a quality mark or đ applies
+ONLY when adjacent to its target (the current/last nucleus vowel, or an
+adjacent `dd`); the non-adjacent branches above don't fire, so the key falls
+through to a literal append/restore exactly as it already does whenever a
+non-adjacent application is rejected (e.g. `roiof`/`toiws`/`dangd` no longer
+reach rồi/tới/đang — they revert to raw keystrokes via `restoreIfInvalid`
+instead). Tones (Telex s/f/r/x/j, VNI 1-5/0) are syllable-level and are
+never affected by this flag, on or off.
+
 Bounds added to protect common English words (from the full Telex sweep):
 - **Circumflex targets only the current (trailing) nucleus** — no consonant
   between the vowel and the buffer end — so `mama`/`nana`/`nono` stay literal

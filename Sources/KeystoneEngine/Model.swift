@@ -124,6 +124,17 @@ public struct EngineConfig: Sendable, Equatable, Codable {
     /// tracking. Off by default; distinct from `macroAutoCapitalize` (which
     /// only affects macro expansions).
     public var autoCapitalize: Bool
+    /// "Cho phép bỏ dấu tự do" (design spec Part A §4 — free tone-mark
+    /// placement). When true (the default — preserves existing behavior and
+    /// the full corpus), a quality mark (circumflex/breve/horn) or đ may
+    /// apply non-adjacently, to the nearest eligible earlier letter, not only
+    /// right after it: `roiof`→rồi, `toiws`→tới, `dangd`→đang (Telex); VNI
+    /// `moi71`→mới, `dang9`→đang. When false, marks/đ apply ONLY when
+    /// adjacent to their target — the non-adjacent branches don't fire and
+    /// the key falls through to literal/append, same as any other rejected
+    /// non-adjacent application. Tones are syllable-level and unaffected
+    /// either way. See DECISIONS.md "Positional (non-adjacent) marks".
+    public var allowFreeToneMark: Bool
 
     public init(
         inputMethod: InputMethod = .telex,
@@ -137,7 +148,8 @@ public struct EngineConfig: Sendable, Equatable, Codable {
         macros: [MacroRule] = [],
         quickStartConsonant: Bool = false,
         quickEndConsonant: Bool = false,
-        autoCapitalize: Bool = false
+        autoCapitalize: Bool = false,
+        allowFreeToneMark: Bool = true
     ) {
         self.inputMethod = inputMethod
         self.codeTable = codeTable
@@ -151,6 +163,7 @@ public struct EngineConfig: Sendable, Equatable, Codable {
         self.quickStartConsonant = quickStartConsonant
         self.quickEndConsonant = quickEndConsonant
         self.autoCapitalize = autoCapitalize
+        self.allowFreeToneMark = allowFreeToneMark
     }
 }
 

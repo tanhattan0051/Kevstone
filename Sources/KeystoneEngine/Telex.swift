@@ -48,7 +48,8 @@ enum Telex {
     /// Fold the raw key list into a `Composition`.
     static func fold(
         _ keys: [Character], quickTelex: Bool = false,
-        quickStartConsonant: Bool = false, quickEndConsonant: Bool = false
+        quickStartConsonant: Bool = false, quickEndConsonant: Bool = false,
+        allowFreeToneMark: Bool = true
     ) -> Composition {
         var cells: [Cell] = []
         var tone: Tone = .ngang
@@ -62,7 +63,8 @@ enum Telex {
                                prevEffect: prevEffect, cells: &cells, tone: &tone,
                                quickTelex: quickTelex,
                                quickStartConsonant: quickStartConsonant,
-                               quickEndConsonant: quickEndConsonant)
+                               quickEndConsonant: quickEndConsonant,
+                               allowFreeToneMark: allowFreeToneMark)
             prevChar = lo
             prevEffect = effect
         }
@@ -77,7 +79,8 @@ enum Telex {
         cells: inout [Cell], tone: inout Tone,
         quickTelex: Bool,
         quickStartConsonant: Bool = false,
-        quickEndConsonant: Bool = false
+        quickEndConsonant: Bool = false,
+        allowFreeToneMark: Bool = true
     ) -> Effect {
 
         // 0. Start-consonant shortcut (Telex "gõ tắt phụ âm đầu"), onset only.
@@ -155,6 +158,8 @@ enum Telex {
                 let isQuGlide = cells[vi].base == .u && vi > 0
                     && !cells[vi - 1].isVowel && cells[vi - 1].consonant == "q"
                 if isQuGlide { continue }
+                let adjacent = vi == SyllableOps.lastVowelIndex(cells)
+                if !adjacent && !allowFreeToneMark { continue }
                 cells[vi].mark = mark
                 if SyllableOps.marksLegal(cells),
                    Phonology.isNucleusPrefix(SyllableOps.foldedNucleusLetters(cells)) {
@@ -200,9 +205,12 @@ enum Telex {
                 // Fire on adjacent dd, or when the syllable is already closed (a
                 // coda exists): dd→đ, dangd→đang, được/đường at commit. A lone d
                 // after an OPEN syllable (English "dad", "did", "deed") stays a
-                // literal letter so those words aren't turned into đa/đi/đê.
+                // literal letter so those words aren't turned into đa/đi/đê. The
+                // closed-syllable branch is non-adjacent (the d isn't right
+                // before the 9/d trigger) and gated by allowFreeToneMark.
                 let adjacent = di == cells.count - 1
-                if adjacent || !SyllableOps.currentCoda(cells).isEmpty {
+                let closedSyllable = !SyllableOps.currentCoda(cells).isEmpty
+                if adjacent || (allowFreeToneMark && closedSyllable) {
                     cells[di].dStroke = true
                     return .dstroke(index: di)
                 }
@@ -243,7 +251,7 @@ enum Telex {
                 // a mark: roiof→rồi). Real triphthongs (ngoaos→ngoáo) append.
                 let adjacent = ei == SyllableOps.lastVowelIndex(cells)
                 let appended = SyllableOps.vowelLetters(cells) + String(bv.letter)
-                if adjacent || !Phonology.isNucleusPrefix(appended) {
+                if adjacent || (allowFreeToneMark && !Phonology.isNucleusPrefix(appended)) {
                     cells[ei].mark = .circumflex
                     if SyllableOps.marksLegal(cells),
                        adjacent || Phonology.isNucleusPrefix(SyllableOps.vowelLetters(cells)) {

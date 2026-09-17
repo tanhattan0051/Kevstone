@@ -8,8 +8,9 @@
 //  - The "mapped" group (inputMethod, codeTable, orthography, quickTelex,
 //    restoreIfInvalid, macrosEnabled, macrosExpandWhenVietnameseOff,
 //    macroAutoCapitalize, quickStartConsonant, quickEndConsonant,
-//    autoCapitalize) is pushed into `EngineConfig` on every change and
-//    reaches the running tap via `EngineController.updateConfig`.
+//    autoCapitalize, allowFreeToneMark) is pushed into `EngineConfig` on
+//    every change and reaches the running tap via
+//    `EngineController.updateConfig`.
 //  - Everything else is scaffolding: real UI, real persistence, but no
 //    engine behavior yet (`EngineConfig` doesn't have a field for it). Each
 //    one is marked `// TODO: wire to engine`.
@@ -127,18 +128,23 @@ final class AppModel {
         }
     }
 
+    /// "Cho phép bỏ dấu tự do" (design spec Part A §4 — free tone-mark
+    /// placement). Gates the engine's non-adjacent quality-mark/đ placement
+    /// (see DECISIONS.md "Positional (non-adjacent) marks"). Defaults to true
+    /// to preserve the engine's existing behavior for users upgrading in.
+    var allowFreeToneMark: Bool = AppModel.loadBool(Keys.allowFreeToneMark, default: true) {
+        didSet {
+            UserDefaults.standard.set(allowFreeToneMark, forKey: Keys.allowFreeToneMark)
+            pushConfig()
+        }
+    }
+
     // MARK: - Scaffolding — persisted, displayed, not yet in EngineConfig
 
     /// "Kiểm tra chính tả"
     // TODO: wire to engine — EngineConfig has no spellCheck field yet.
     var spellCheck: Bool = AppModel.loadBool(Keys.spellCheck, default: true) {
         didSet { UserDefaults.standard.set(spellCheck, forKey: Keys.spellCheck) }
-    }
-
-    /// "Cho phép bỏ dấu tự do"
-    // TODO: wire to engine (design spec Part A §4 — free tone-mark placement).
-    var allowFreeToneMark: Bool = AppModel.loadBool(Keys.allowFreeToneMark, default: false) {
-        didSet { UserDefaults.standard.set(allowFreeToneMark, forKey: Keys.allowFreeToneMark) }
     }
 
     /// "Viết Hoa chữ cái đầu câu"
@@ -491,7 +497,7 @@ final class AppModel {
         restoreIfInvalid = true
 
         spellCheck = true
-        allowFreeToneMark = false
+        allowFreeToneMark = true
         autoCapitalize = true
         quickStartConsonant = false
         quickEndConsonant = false
@@ -623,7 +629,8 @@ final class AppModel {
             macros: MacroStore.shared.macros.map { $0.toRule() },
             quickStartConsonant: quickStartConsonant,
             quickEndConsonant: quickEndConsonant,
-            autoCapitalize: autoCapitalize
+            autoCapitalize: autoCapitalize,
+            allowFreeToneMark: allowFreeToneMark
         ))
     }
 
