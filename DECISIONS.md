@@ -35,6 +35,19 @@ isolate layer 1 in isolation. With `restoreIfInvalid` **on** (the default),
 those same key sequences revert at commit to the raw keys (`ass`, `aaa`,
 `ddd`), because the intermediate form is not a valid syllable.
 
+## Positional (non-adjacent) marks
+
+Diacritic mark keys may be typed away from their base letter — at the end of the
+word or mid-word, the common "bỏ dấu ở cuối" style — not only immediately after
+it. Tones are syllable-level (always positional). Quality marks (circumflex,
+horn, breve) and đ now also apply to the nearest eligible earlier letter:
+`roiof`→rồi, `toiws`→tới, `dangd`/`dadng`→đang, VNI `toi6`→tôi, `moi71`→mới.
+A mark is applied non-adjacently only when treating the key as a new nucleus
+vowel would form an illegal nucleus (gated by `isNucleusPrefix`), so real
+triphthongs (`ngoaos`→ngoáo) and English words (`add`) are left alone. đ only
+ever strokes an onset d (a `d` after a vowel, as in English "add", stays
+literal). Implemented for Telex (aa/ee/oo, w, dd) and VNI (6/7/8/9).
+
 ## Tone placement
 
 Tone placement follows spec Part A §4 exactly. The modern/classic toggle
