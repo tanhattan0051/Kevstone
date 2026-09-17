@@ -38,5 +38,4 @@ swift run Keystone          # chạy app menu-bar (cấp quyền Accessibility k
 - Mọi góp ý, gửi cho mình qua **tanhattan0051@gmail.com**
 
 ## Bản quyền
-Engine viết mới từ đầu (clean-room), **không** dùng mã của OpenKey (GPLv3) — bản quyền thuộc **Tạ Nhật Tân**.
-Phát hành theo giấy phép **MIT** (xem [`LICENSE`](LICENSE)).
+Bản quyền thuộc **Tạ Nhật Tân**. Phát hành theo giấy phép **MIT** (xem [`LICENSE`](LICENSE)).
