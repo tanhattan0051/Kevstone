@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Keystone.entitlements — Hardened Runtime entitlements for the release build.
+
+  Design spec: docs/superpowers/specs/2026-09-16-keystone-design.md, Part D §3
+  ("Entitlements & the accessibility grant").
+
+  Why this file is (almost) empty:
+
+  - Hardened Runtime is turned on at the `codesign --options runtime` call
+    (see Scripts/sign.sh), not by anything in here. This file only grants
+    EXCEPTIONS to the hardened-runtime defaults, and Keystone needs none.
+
+  - The CGEventTap that Keystone relies on for Vietnamese input needs NO
+    entitlement at all. There is no `com.apple.security.*` key that unlocks
+    `CGEvent.tapCreate`. What it actually needs is a RUNTIME TCC grant —
+    Accessibility (System Settings > Privacy & Security > Accessibility),
+    and possibly Input Monitoring — which the user grants by clicking
+    "Allow" the first time the app asks (`AXIsProcessTrustedWithOptions`).
+    That grant is tracked by macOS against the app's code signature; it is
+    NOT an entitlement and does not belong in this plist.
+
+  - App Sandbox is intentionally OFF: the sandbox key
+    (`com.apple.security.app-sandbox`) is deliberately NOT present below.
+    A sandboxed process cannot create a global event tap or post synthetic
+    keystrokes system-wide, so sandboxing Keystone would break its core
+    function. This also means Keystone cannot ship on the Mac App Store
+    (see spec: self-distribution via notarized DMG instead) — that is a
+    known, accepted tradeoff, not an oversight.
+
+  - Do NOT add entitlements here speculatively. In particular, avoid
+    `com.apple.security.cs.disable-library-validation` and similar
+    "sensitive" hardened-runtime exceptions unless a specific, understood
+    dependency requires one (e.g. loading an unsigned plugin — Keystone has
+    none). Sparkle 2 (Phase 5, later) ships an XPC helper that may need a
+    small number of narrow hardened-runtime entitlements of its own when it
+    is integrated — that is the one place the spec anticipates adding
+    anything here, and only for Sparkle's helper target, not the main app.
+-->
+<plist version="1.0">
+<dict>
+    <!--
+      Intentionally empty. Hardened Runtime's secure defaults (library
+      validation, no unsigned executable memory, no DYLD env vars, etc.)
+      are exactly what Keystone wants, and App Sandbox is omitted above.
+    -->
+</dict>
+</plist>

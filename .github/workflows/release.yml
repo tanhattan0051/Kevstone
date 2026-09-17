@@ -1,0 +1,180 @@
+# release.yml — build, sign, package, and notarize a Keystone.app DMG, then
+# attach it to a GitHub Release.
+#
+# Design spec: docs/superpowers/specs/2026-09-16-keystone-design.md, Part D §3
+# (Build & Distribution) and §4 (CI: "Keep signing/notarization in a
+# separate, tag-triggered `release` workflow (guarded by secrets) so
+# ordinary PRs never depend on certificates.").
+#
+# This is DELIBERATELY separate from .github/workflows/ci.yml, which runs
+# the engine/input test suites on every push/PR and needs no secrets. This
+# workflow only runs on version tags, and only does real work if the
+# required secrets are configured — see the `secrets-configured` gate below.
+#
+# --------------------------------------------------------------------------
+# REQUIRED REPO CONFIGURATION (do this once, in GitHub repo Settings >
+# Secrets and variables > Actions, before pushing a tag):
+#
+#   Secrets:
+#     APPLE_DEV_ID_NAME           - name on the "Developer ID Application"
+#                                    certificate, e.g. "Jane Appleseed".
+#     APPLE_TEAM_ID                - your 10-character Apple Team ID.
+#     APPLE_CERTIFICATE_P12_BASE64 - the Developer ID Application cert +
+#                                    private key, exported as a .p12 and
+#                                    base64-encoded (`base64 -i cert.p12`).
+#     APPLE_CERTIFICATE_PASSWORD   - password the .p12 was exported with.
+#     APPLE_NOTARY_KEY_ID           - App Store Connect API key id.
+#     APPLE_NOTARY_ISSUER_ID        - App Store Connect API issuer id.
+#     APPLE_NOTARY_KEY_P8_BASE64    - the API private key (.p8), base64-encoded.
+#
+#   These map onto Scripts/sign.sh (APPLE_DEV_ID_NAME, APPLE_TEAM_ID) and
+#   Scripts/notarize.sh (KEYSTONE_NOTARY keychain profile), which this
+#   workflow sets up in an ephemeral, runner-local keychain — nothing here
+#   is written into the repo. See Scripts/README.md for how to obtain each
+#   value and how to test the same steps locally.
+#
+#   If any required secret is missing, the `secrets-configured` job below
+#   evaluates to false and every downstream job is skipped (`if:` guard) —
+#   the workflow run still shows up green/no-op rather than failing, so a
+#   tag push on a fork or before secrets are configured doesn't produce a
+#   scary red X.
+# --------------------------------------------------------------------------
+
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+# Avoid two release runs racing each other for the same tag.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # Gate job: turns "are the secrets configured?" into a single boolean
+  # output so every real job can be skipped cleanly (rather than failing on
+  # missing env vars deep inside a script) when this repo/fork hasn't set
+  # up Developer ID + notary credentials yet.
+  secrets-configured:
+    name: Check release secrets
+    runs-on: ubuntu-latest
+    outputs:
+      ready: ${{ steps.check.outputs.ready }}
+    steps:
+      - name: Check required secrets are present
+        id: check
+        run: |
+          if [[ -n "${{ secrets.APPLE_DEV_ID_NAME }}" && \
+                -n "${{ secrets.APPLE_TEAM_ID }}" && \
+                -n "${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}" && \
+                -n "${{ secrets.APPLE_CERTIFICATE_PASSWORD }}" && \
+                -n "${{ secrets.APPLE_NOTARY_KEY_ID }}" && \
+                -n "${{ secrets.APPLE_NOTARY_ISSUER_ID }}" && \
+                -n "${{ secrets.APPLE_NOTARY_KEY_P8_BASE64 }}" ]]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Release secrets are not fully configured — skipping build/sign/notarize. See .github/workflows/release.yml header for the required secret names."
+          fi
+
+  release:
+    name: Build, sign, notarize, release
+    needs: secrets-configured
+    if: needs.secrets-configured.outputs.ready == 'true'
+    runs-on: macos-15
+    timeout-minutes: 60
+    env:
+      APPLE_DEV_ID_NAME: ${{ secrets.APPLE_DEV_ID_NAME }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      KEYSTONE_NOTARY: KEYSTONE_NOTARY   # keychain profile name created below
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show Swift version
+        run: swift --version
+
+      # ---------------------------------------------------------------
+      # Import the Developer ID certificate into a fresh, throwaway
+      # keychain scoped to this runner. Never touches the repo or persists
+      # beyond the job.
+      # ---------------------------------------------------------------
+      - name: Import Developer ID certificate
+        env:
+          CERT_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
+          CERT_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          KEYCHAIN_PATH="$RUNNER_TEMP/release-signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(uuidgen)"
+          CERT_PATH="$RUNNER_TEMP/developer_id.p12"
+
+          echo -n "$CERT_P12_BASE64" | base64 --decode -o "$CERT_PATH"
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERT_PATH" -k "$KEYCHAIN_PATH" -P "$CERT_PASSWORD" \
+              -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+              -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          # Make this keychain visible to codesign alongside the default list.
+          security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | sed 's/"//g')
+
+          rm -f "$CERT_PATH"
+          echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
+
+      # ---------------------------------------------------------------
+      # Store the notary credential (App Store Connect API key) under the
+      # profile name Scripts/notarize.sh expects: $KEYSTONE_NOTARY.
+      # ---------------------------------------------------------------
+      - name: Configure notarytool credential profile
+        env:
+          NOTARY_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
+          NOTARY_ISSUER_ID: ${{ secrets.APPLE_NOTARY_ISSUER_ID }}
+          NOTARY_KEY_P8_BASE64: ${{ secrets.APPLE_NOTARY_KEY_P8_BASE64 }}
+        run: |
+          set -euo pipefail
+          KEY_PATH="$RUNNER_TEMP/notary_key.p8"
+          echo -n "$NOTARY_KEY_P8_BASE64" | base64 --decode -o "$KEY_PATH"
+
+          xcrun notarytool store-credentials "$KEYSTONE_NOTARY" \
+              --key "$KEY_PATH" \
+              --key-id "$NOTARY_KEY_ID" \
+              --issuer "$NOTARY_ISSUER_ID" \
+              --keychain "$KEYCHAIN_PATH"
+
+          rm -f "$KEY_PATH"
+
+      - name: Build .app
+        run: Scripts/build_app.sh dist
+
+      - name: Sign .app
+        run: Scripts/sign.sh dist/Keystone.app
+
+      - name: Package DMG
+        run: Scripts/make_dmg.sh dist/Keystone.app dist/Keystone.dmg
+
+      - name: Notarize + staple DMG
+        run: Scripts/notarize.sh dist/Keystone.dmg
+
+      - name: Clean up temporary keychain
+        if: always()
+        run: |
+          if [[ -n "${KEYCHAIN_PATH:-}" && -f "${KEYCHAIN_PATH}" ]]; then
+            security delete-keychain "$KEYCHAIN_PATH" || true
+          fi
+
+      - name: Upload DMG as release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/Keystone.dmg
+          # Draft so a human confirms release notes before it goes public;
+          # flip to `draft: false` once the release process is trusted.
+          draft: true
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
