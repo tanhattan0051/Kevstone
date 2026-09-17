@@ -89,14 +89,19 @@ final class AppModel {
 
     // MARK: - Mapped group — pushed into EngineConfig
 
-    /// Output code table. App default is **Unicode tổ hợp** (`.unicodeCompound`,
-    /// combining diacritics) per the author's preference. Note the tradeoff:
-    /// NFC precomposed (`.unicode`) is 1 code-unit per grapheme and is the
-    /// most double-char/backspace-safe across apps (design spec E.2/E.3), so
-    /// if an app mishandles combining marks, switch back in the Control Panel.
-    /// `EngineConfig.codeTable` still defaults `.unicode` so the corpus keeps
-    /// pinning the precomposed bytes.
-    var codeTable: CodeTable = AppModel.loadRaw(Keys.codeTable, default: .unicodeCompound) {
+    /// Output code table. App default is **Unicode dựng sẵn** (`.unicode`, NFC
+    /// precomposed): 1 code-unit per grapheme, so the tap's `backspaceCount`
+    /// (counted in code units) always matches how apps delete — the
+    /// double-char/backspace-safe choice across apps (design spec E.2/E.3).
+    ///
+    /// `.unicodeCompound` ("Unicode tổ hợp", combining diacritics) spells one
+    /// grapheme as base + combining mark(s) — 2-3 code units — so on a restore
+    /// or diacritic edit the code-unit backspace count no longer matches apps
+    /// that delete a whole grapheme per Delete, and a char gets dropped or
+    /// doubled (e.g. `task`→`tassk`, `google`→`gooogle`). It stays available
+    /// in the Control Panel for the legacy software that needs decomposed
+    /// Unicode, but must NOT be the default. See DECISIONS.md "Bảng mã".
+    var codeTable: CodeTable = AppModel.loadRaw(Keys.codeTable, default: .unicode) {
         didSet {
             UserDefaults.standard.set(codeTable.rawValue, forKey: Keys.codeTable)
             pushConfig()
