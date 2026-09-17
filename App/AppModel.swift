@@ -15,6 +15,7 @@
 import SwiftUI
 import AppKit
 import Observation
+import os
 import KeystoneEngine
 import KeystoneInput
 
@@ -40,6 +41,7 @@ enum SwitchKeyModifier: String, CaseIterable, Identifiable, Codable {
 @Observable
 final class AppModel {
     static let shared = AppModel()
+    private static let log = Logger(subsystem: "com.tanta.keystone", category: "AppModel")
 
     // MARK: - Enable / input method (existing, tap-wired)
 
@@ -251,7 +253,19 @@ final class AppModel {
         let path = Bundle.main.executableURL ?? URL(fileURLWithPath: CommandLine.arguments[0])
         let proc = Process()
         proc.executableURL = path
-        try? proc.run()
+        do {
+            try proc.run()
+        } catch {
+            // Don't quit into nothing — if we can't spawn the replacement, tell
+            // the user and stay running rather than silently disappearing.
+            Self.log.error("relaunch failed: \(error.localizedDescription, privacy: .public)")
+            let alert = NSAlert()
+            alert.messageText = "Không khởi động lại được Keystone"
+            alert.informativeText = "Hãy thoát và mở lại thủ công. (\(error.localizedDescription))"
+            alert.alertStyle = .warning
+            alert.runModal()
+            return
+        }
         shutdown()
         NSApp.terminate(nil)
     }

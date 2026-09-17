@@ -22,6 +22,7 @@ enum SingleInstance {
             return true   // can't resolve a home dir → fail open, don't block startup
         }
         let dir = base.appendingPathComponent("com.tanta.keystone", isDirectory: true)
+        // Best-effort: if this fails, the open() below fails and we fail open.
         try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
         let lockPath = dir.appendingPathComponent("instance.lock").path
 

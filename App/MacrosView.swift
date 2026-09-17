@@ -5,6 +5,7 @@
 import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
+import os
 
 struct Macro: Identifiable, Codable, Hashable {
     var id = UUID()
@@ -19,6 +20,7 @@ struct Macro: Identifiable, Codable, Hashable {
 @MainActor
 final class MacroStore {
     static let shared = MacroStore()
+    private static let log = Logger(subsystem: "com.tanta.keystone", category: "MacroStore")
 
     var macros: [Macro] = []
 
@@ -26,6 +28,7 @@ final class MacroStore {
         let base = FileManager.default
             .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("com.tanta.keystone", isDirectory: true)
+        // Best-effort: if this fails, the later save() write fails and logs there.
         try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
         return base.appendingPathComponent("macros.json")
     }()
@@ -61,15 +64,25 @@ final class MacroStore {
     }
 
     func load() {
-        guard let data = try? Data(contentsOf: fileURL),
-              let decoded = try? JSONDecoder().decode([Macro].self, from: data)
-        else { return }
-        macros = decoded
+        // First run: no file yet is normal, not an error.
+        guard FileManager.default.fileExists(atPath: fileURL.path) else { return }
+        do {
+            let data = try Data(contentsOf: fileURL)
+            macros = try JSONDecoder().decode([Macro].self, from: data)
+        } catch {
+            // A corrupt/unreadable file must NOT silently look like "no macros" —
+            // keep the current list and log so the failure is visible.
+            Self.log.error("load macros failed (\(self.fileURL.path, privacy: .public)): \(error.localizedDescription, privacy: .public)")
+        }
     }
 
     func save() {
-        guard let data = try? JSONEncoder().encode(macros) else { return }
-        try? data.write(to: fileURL, options: .atomic)
+        do {
+            let data = try JSONEncoder().encode(macros)
+            try data.write(to: fileURL, options: .atomic)
+        } catch {
+            Self.log.error("save macros failed (\(self.fileURL.path, privacy: .public)): \(error.localizedDescription, privacy: .public)")
+        }
     }
 
     func importFile(_ url: URL) throws {
@@ -168,8 +181,11 @@ struct MacrosView: View {
         panel.allowedContentTypes = [.json]
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
-        if panel.runModal() == .OK, let url = panel.url {
-            try? store.importFile(url)
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            try store.importFile(url)
+        } catch {
+            reportError("Không nhập được gõ tắt từ tệp này", error)
         }
     }
 
@@ -177,9 +193,21 @@ struct MacrosView: View {
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.json]
         panel.nameFieldStringValue = "keystone-macros.json"
-        if panel.runModal() == .OK, let url = panel.url {
-            try? store.exportFile(to: url)
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            try store.exportFile(to: url)
+        } catch {
+            reportError("Không xuất được gõ tắt", error)
         }
+    }
+
+    /// Surface a file-operation failure to the user instead of swallowing it.
+    private func reportError(_ message: String, _ error: Error) {
+        let alert = NSAlert()
+        alert.messageText = message
+        alert.informativeText = error.localizedDescription
+        alert.alertStyle = .warning
+        alert.runModal()
     }
 }
 

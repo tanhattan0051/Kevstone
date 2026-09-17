@@ -158,6 +158,10 @@ private struct TapSink: EventSink {
     }
 
     func postText(_ text: String) {
+        // Intentional silent drop: CGEvent allocation only fails under severe
+        // resource pressure, and this runs on the tap hot path where logging
+        // per keystroke is itself forbidden (spec §3). Dropping one synthesized
+        // char is the least-bad outcome.
         guard let down = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: true),
               let up = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: false) else { return }
         let utf16 = Array(text.utf16)
@@ -175,6 +179,7 @@ private struct TapSink: EventSink {
     }
 
     private func post(virtualKey: CGKeyCode, keyDown: Bool) {
+        // Intentional silent drop (see postText): hot path, no per-keystroke logging.
         guard let e = CGEvent(keyboardEventSource: source, virtualKey: virtualKey, keyDown: keyDown) else { return }
         e.flags = []
         e.setIntegerValueField(.eventSourceUserData, value: EventTapController.selfTag)
