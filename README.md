@@ -16,12 +16,16 @@ Keystone (app)  (SwiftUI) — MenuBarExtra · Bảng điều khiển · Gõ tắ
 
 ## Trạng thái
 - ✅ **Thiết kế:** spec + danh mục lỗi + icon đã chốt.
-- ✅ **Phase 1 — Engine + bộ test (XONG):** `KeystoneEngine` (Swift thuần) — Telex, Unicode NFC, đặt dấu kiểu mới/cũ, `Syllable` fold, restore-if-invalid, backspace khôi phục dấu. Bộ test Swift Testing **xanh**: 153 ca corpus (8 nhóm) + 12 ca property. Chạy: `swift test`. Quyết định engine ghi ở [`DECISIONS.md`](DECISIONS.md); CI ở [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
-- ⬜ **Tiếp theo — Phase 2:** tầng nhập `KeystoneInput` (CGEventTap + re-enable + watchdog + cache) + menu-bar tối thiểu. Xem `HANDOFF.md`.
+- ✅ **Phase 1 — Engine + bộ test (XONG):** `KeystoneEngine` (Swift thuần) — Telex, Unicode NFC, đặt dấu kiểu mới/cũ, `Syllable` fold, restore-if-invalid, backspace khôi phục dấu. Test **xanh**: 153 ca corpus + 12 property.
+- ✅ **Phase 2 — Tầng nhập + menu-bar (XONG, cần nghiệm thu máy thật):** `KeystoneInput` (CGEventTap chạy đúng cách: re-enable trong callback + watchdog 1.5s + self-tag chống đệ quy + không việc nặng trên hot path) + app menu-bar tối thiểu (`App/`). Logic executor/translator/EngineController có **22 unit test xanh**. Quyết định ở [`DECISIONS.md`](DECISIONS.md); CI ở [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+- ⬜ **Tiếp theo — Phase 3:** VNI, Simple/Quick Telex, 4 bảng mã cũ; nâng bảng rime §5.3. Xem `HANDOFF.md`.
 
 ```
-swift build && swift test   # engine phải luôn xanh
+swift build && swift test   # engine + input phải luôn xanh
+swift run Keystone          # chạy app menu-bar (cấp quyền Accessibility khi được hỏi)
 ```
+
+> ⚠️ Gõ tiếng Việt ở mọi app **chỉ chạy trên macOS thật có quyền Accessibility** — `swift run Keystone`, cấp quyền, rồi thử. Xem mục **[VERIFY]** trong `HANDOFF.md`.
 
 ## Bản quyền
 Engine viết mới từ đầu (clean-room), **không** dùng mã của OpenKey (GPLv3). Bản quyền thuộc tác giả; giấy phép tuỳ chọn.

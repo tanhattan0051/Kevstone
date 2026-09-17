@@ -3,24 +3,38 @@ import PackageDescription
 
 let package = Package(
     name: "Keystone",
-    // The pure engine has no OS-version dependency (Swift stdlib + Foundation
-    // only), so it builds/tests on any recent macOS. The macOS 26 requirement
-    // belongs to the app + input layer (Phase 2), pinned in the Xcode project.
-    platforms: [.macOS(.v13)],
+    // The pure engine has no OS-version dependency; the input layer + app use
+    // AppKit/CoreGraphics/MenuBarExtra (macOS 13+). The macOS 26 requirement of
+    // the shippable app is pinned in the Xcode project (Phase 5), not here.
+    platforms: [.macOS(.v14)],
     products: [
         .library(name: "KeystoneEngine", targets: ["KeystoneEngine"]),
+        .library(name: "KeystoneInput", targets: ["KeystoneInput"]),
+        .executable(name: "Keystone", targets: ["Keystone"]),
     ],
     targets: [
-        // The pure Vietnamese linguistic core. Depends on nothing but the
-        // Swift standard library + Foundation (used only in the Encoding layer
-        // for NFC normalization — never on a hot path). No AppKit/CoreGraphics.
-        .target(
-            name: "KeystoneEngine"
+        // Pure Vietnamese linguistic core (Swift stdlib + Foundation only).
+        .target(name: "KeystoneEngine"),
+
+        // macOS input layer: CGEventTap lifecycle + robustness + executor.
+        .target(name: "KeystoneInput", dependencies: ["KeystoneEngine"]),
+
+        // Minimal SwiftUI menu-bar agent app (run with `swift run Keystone`).
+        .executableTarget(
+            name: "Keystone",
+            dependencies: ["KeystoneEngine", "KeystoneInput"],
+            path: "App",
+            exclude: ["Info.plist"]   // used only when packaged as a .app (Phase 5), not by `swift run`
         ),
+
         .testTarget(
             name: "KeystoneEngineTests",
             dependencies: ["KeystoneEngine"],
             resources: [.copy("Corpus")]
+        ),
+        .testTarget(
+            name: "KeystoneInputTests",
+            dependencies: ["KeystoneInput"]
         ),
     ]
 )

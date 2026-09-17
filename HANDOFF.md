@@ -42,7 +42,18 @@ Mã nguồn OpenKey để tham chiếu (đọc để hiểu lỗi, KHÔNG chép)
   - Cấu trúc: `Sources/KeystoneEngine/{Model,NFC,TonePlacement,Phonology,Telex,Engine}.swift`; test + corpus JSON ở `Tests/KeystoneEngineTests/`.
   - Đã diệt tại engine (có regression test): E.5 (hoa/thường theo cấu trúc, `VIEEJT`→`VIỆT`), E.6 (`chưa`+`a`→`chưaa` không ép `chưâ`; `hồng` không `hoồng`; `huơ`/`khuơ`/`thuở` gõ được qua phím `[`; `gì`/`gìn`), và bảo vệ từ tiếng Anh (`wrong`,`coins`,`ruins`…).
   - Còn nợ (Phase 3): bảng rime §5.3 mới ở mức luật offglide (đủ cho v1, nên nâng thành bảng đầy đủ sau); VNI/Simple/Quick Telex; 4 bảng mã cũ (TCVN3/VNI-Win/tổ hợp/CP1258).
-- **Phase 2 (bắt đầu ở đây):** `KeystoneInput` (CGEventTap + re-enable + watchdog + cache) + menu-bar tối thiểu → **kiểm các mục [VERIFY]** trên máy thật. Engine đã thuần & test kỹ nên tầng nhập chỉ cần *thực thi* `EngineResult` (xoá N + gõ chuỗi).
+- ✅ **Phase 2 — XONG (cần nghiệm thu máy thật):** `KeystoneInput` + app menu-bar.
+  - `Sources/KeystoneInput/`: `EventTapController` (tap trên thread riêng + run loop; **Layer A** re-enable ngay trong callback khi `.tapDisabledByTimeout/UserInput`; **Layer B** watchdog `DispatchSourceTimer` 1.5s; **self-tag** (`eventSourceUserData` = "KSTONE") chống xử lý lại event của chính mình; **không việc nặng** trên hot path), `EngineController` (bọc `Engine` an toàn thread bằng `OSAllocatedUnfairLock`), `KeyTranslator` (keycode/flags → quyết định), `KeystrokeExecutor` + `EventSink`, `Permissions` (AX + Input Monitoring), `SystemStateCache`.
+  - `App/`: SwiftUI `MenuBarExtra` tối thiểu (`.accessory` — không icon Dock): bật/tắt tiếng Việt, trạng thái + nút cấp quyền Accessibility, Thoát. Chạy: `swift run Keystone`.
+  - Test: 22 unit test cho translator/executor/EngineController (tap sống không test được headless — đúng như spec).
+  - **Cách nghiệm thu:** `swift run Keystone` → cấp quyền Accessibility khi macOS hỏi → gõ thử ở TextEdit/Notes/Safari/Terminal.
+- **Phase 3 (tiếp theo):** VNI, Simple Telex 1/2, Quick Telex + 4 bảng mã (TCVN3/VNI-Win/tổ hợp/CP1258); nâng bảng rime §5.3 từ luật offglide lên bảng đầy đủ.
+
+## ⚠️ [VERIFY] Phase 2 — phải đo trên macOS thật (chưa test được ở đây)
+1. **Cấp quyền xong có cần khởi động lại app?** Nếu `AXIsProcessTrusted()` = true nhưng `CGEvent.tapCreate` vẫn nil → cần relaunch. App hiện log lỗi + poll; nên thêm nút "Khởi động lại" nếu gặp.
+2. **Đúp chữ (E.2/E.3):** `TapSink.postText` gắn chuỗi Unicode lên **cả keyDown và keyUp** (theo spec). Vài app (Terminal/Electron/VSCode) có thể chèn 2 lần → nếu bị, đổi sang chỉ gắn trên keyDown, hoặc fallback gõ từng grapheme (lập bảng quirk theo bundle id).
+3. **keyUp không cặp keyDown (Open Q #6):** ta suppress keyDown vật lý nhưng keyUp vẫn lọt (không tap keyUp) → thử game/app theo dõi phím thô.
+4. **Cần thêm Input Monitoring?** Đã có `Permissions.inputMonitoringGranted()` để dò; xác nhận macOS 27 có đòi không (onboarding 1 hay 2 thẻ quyền).
 - **Phase 3:** VNI, Simple Telex 1/2, Quick Telex + đủ 5 bảng mã.
 - **Phase 4:** gõ tắt, smart-switch, công cụ chuyển mã, Bảng điều khiển 4 tab, onboarding.
 - **Phase 5:** ký, notarize, DMG, Sparkle.
