@@ -60,6 +60,26 @@ enum SyllableOps {
         return di
     }
 
+    /// The written nucleus letters after folding a qu/gi glide out of the vowel
+    /// run (the u of qu, the i of gi are onset glides, not nucleus vowels). Used
+    /// to validity-gate mark application so `quăng` (glide u → nucleus "ă",
+    /// valid) and `nữa` (real u → nucleus "ưa", valid) resolve correctly while
+    /// an impossible "uă" is rejected.
+    static func foldedNucleusLetters(_ cells: [Cell]) -> String {
+        let vowelIdx = cells.indices.filter { cells[$0].isVowel }
+        guard let first = vowelIdx.first else { return "" }
+        let onset = cells[..<first].filter { !$0.isVowel }
+        var letters = vowelIdx.map { NFC.qualityLetter(cells[$0].base, cells[$0].mark) }
+        if onset.last?.consonant == "q", vowelIdx.count >= 2,
+           cells[vowelIdx[0]].base == .u, cells[vowelIdx[0]].mark == .none {
+            letters.removeFirst()
+        } else if onset.count == 1, onset[0].consonant == "g", vowelIdx.count >= 2,
+                  cells[vowelIdx[0]].base == .i, cells[vowelIdx[0]].mark == .none {
+            letters.removeFirst()
+        }
+        return String(letters)
+    }
+
     /// At most one quality-marked vowel, unless they form the ươ pair.
     static func marksLegal(_ cells: [Cell]) -> Bool {
         let marked = cells.enumerated().filter { $0.element.isVowel && $0.element.mark != .none }

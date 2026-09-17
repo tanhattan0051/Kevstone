@@ -116,30 +116,24 @@ enum Telex {
                 if SyllableOps.marksLegal(cells) { return .mark(key: "w", targets: [ui, oi]) }
                 cells[ui].mark = .none; cells[oi].mark = .none   // revert
             }
-            if let vi = SyllableOps.lastVowelIndex(cells), cells[vi].mark == .none {
-                let base = cells[vi].base
-                let target: VowelMark? = (base == .a) ? .breve
-                    : (base == .o || base == .u) ? .horn : nil
-                if let m = target {
-                    cells[vi].mark = m
-                    if SyllableOps.marksLegal(cells) { return .mark(key: "w", targets: [vi]) }
-                    cells[vi].mark = .none   // revert → fall through to bare ư
+            // Apply breve(a) / horn(o,u) to the eligible vowel that keeps the
+            // (qu/gi-folded) nucleus valid, trying nearest-to-end first. This
+            // resolves the target for marks typed non-adjacently: hoaw→hoă,
+            // nuaw→nưa (uă invalid → horn the u instead), toiws→tới (horn the o
+            // past the offglide i), quawng→quăng (glide u skipped, breve the a).
+            for vi in cells.indices.reversed() where cells[vi].isVowel && cells[vi].mark == .none {
+                let m: VowelMark? = (cells[vi].base == .a) ? .breve
+                    : (cells[vi].base == .o || cells[vi].base == .u) ? .horn : nil
+                guard let mark = m else { continue }
+                let isQuGlide = cells[vi].base == .u && vi > 0
+                    && !cells[vi - 1].isVowel && cells[vi - 1].consonant == "q"
+                if isQuGlide { continue }
+                cells[vi].mark = mark
+                if SyllableOps.marksLegal(cells),
+                   Phonology.isNucleusPrefix(SyllableOps.foldedNucleusLetters(cells)) {
+                    return .mark(key: "w", targets: [vi])
                 }
-            }
-            // Last vowel is an offglide (e/i/y) with no target of its own —
-            // search backward for an earlier eligible vowel (toiws→tới, guiwr→gửi).
-            if let hi = cells.lastIndex(where: {
-                $0.isVowel && $0.mark == .none && ($0.base == .a || $0.base == .o || $0.base == .u)
-            }) {
-                let isQuGlide = hi > 0 && !cells[hi - 1].isVowel && cells[hi - 1].consonant == "q"
-                if !isQuGlide {
-                    cells[hi].mark = (cells[hi].base == .a) ? .breve : .horn
-                    if SyllableOps.marksLegal(cells),
-                       Phonology.isNucleusPrefix(SyllableOps.vowelLetters(cells)) {
-                        return .mark(key: "w", targets: [hi])
-                    }
-                    cells[hi].mark = .none
-                }
+                cells[vi].mark = .none
             }
             // bare w → insert ư
             cells.append(.vowel(.u, .horn, upper: up))

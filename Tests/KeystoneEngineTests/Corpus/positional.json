@@ -34,5 +34,11 @@
   { "name": "VNI moi71 -> mới (non-adjacent horn)", "keys": "moi71", "method": "vni", "orthography": "modern", "restoreIfInvalid": true, "expected": "mới" },
   { "name": "VNI gui73 -> gửi", "keys": "gui73", "method": "vni", "orthography": "modern", "restoreIfInvalid": true, "expected": "gửi" },
   { "name": "VNI toi71 -> tới", "keys": "toi71", "method": "vni", "orthography": "modern", "restoreIfInvalid": true, "expected": "tới" },
-  { "name": "VNI ngui73 -> ngửi", "keys": "ngui73", "method": "vni", "orthography": "modern", "restoreIfInvalid": true, "expected": "ngửi" }
+  { "name": "VNI ngui73 -> ngửi", "keys": "ngui73", "method": "vni", "orthography": "modern", "restoreIfInvalid": true, "expected": "ngửi" },
+  { "name": "nuawx -> nữa (w horns u, not breve a)", "keys": "nuawx", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "nữa" },
+  { "name": "cuaw -> cưa", "keys": "cuaw", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "cưa" },
+  { "name": "muaw -> mưa", "keys": "muaw", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "mưa" },
+  { "name": "hoaw -> hoă (breve a wins, oă valid)", "keys": "hoaw", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "hoă" },
+  { "name": "cangw -> căng (breve past coda)", "keys": "cangw", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "căng" },
+  { "name": "quawng -> quăng (qu-glide u skipped, breve a)", "keys": "quawng", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "quăng" }
 ]
