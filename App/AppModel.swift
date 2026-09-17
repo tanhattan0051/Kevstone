@@ -156,21 +156,27 @@ final class AppModel {
     }
 
     /// "Cho phép gõ tắt" (Gõ tắt tab)
-    // TODO: wire to engine — macro expansion isn't implemented yet (Phase 4).
     var macrosEnabled: Bool = AppModel.loadBool(Keys.macrosEnabled, default: true) {
-        didSet { UserDefaults.standard.set(macrosEnabled, forKey: Keys.macrosEnabled) }
+        didSet {
+            UserDefaults.standard.set(macrosEnabled, forKey: Keys.macrosEnabled)
+            pushConfig()
+        }
     }
 
     /// "Gõ tắt cả khi tắt tiếng Việt"
-    // TODO: wire to engine (Phase 4).
     var macrosExpandWhenVietnameseOff: Bool = AppModel.loadBool(Keys.macrosExpandWhenVietnameseOff, default: false) {
-        didSet { UserDefaults.standard.set(macrosExpandWhenVietnameseOff, forKey: Keys.macrosExpandWhenVietnameseOff) }
+        didSet {
+            UserDefaults.standard.set(macrosExpandWhenVietnameseOff, forKey: Keys.macrosExpandWhenVietnameseOff)
+            pushConfig()
+        }
     }
 
     /// "Tự động viết hoa" (macro-triggered capitalization, Gõ tắt tab)
-    // TODO: wire to engine (Phase 4).
     var macroAutoCapitalize: Bool = AppModel.loadBool(Keys.macroAutoCapitalize, default: true) {
-        didSet { UserDefaults.standard.set(macroAutoCapitalize, forKey: Keys.macroAutoCapitalize) }
+        didSet {
+            UserDefaults.standard.set(macroAutoCapitalize, forKey: Keys.macroAutoCapitalize)
+            pushConfig()
+        }
     }
 
     /// "Khởi động cùng macOS"
@@ -220,6 +226,9 @@ final class AppModel {
     }
 
     func bootstrap() {
+        // Re-push EngineConfig whenever macros are added/edited/imported, so
+        // the running tap picks up the new rules without a restart.
+        MacroStore.shared.onChange = { [weak self] in self?.pushConfig() }
         // Reset the composing buffer when the frontmost app changes (off hot path).
         appSwitchObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
@@ -313,7 +322,11 @@ final class AppModel {
             codeTable: codeTable,
             orthography: orthography,
             restoreIfInvalid: restoreIfInvalid,
-            quickTelex: quickTelex
+            quickTelex: quickTelex,
+            macrosEnabled: macrosEnabled,
+            macrosExpandWhenVietnameseOff: macrosExpandWhenVietnameseOff,
+            macroAutoCapitalize: macroAutoCapitalize,
+            macros: MacroStore.shared.macros.map { $0.toRule() }
         ))
     }
 

@@ -107,6 +107,78 @@ onset before `i` (`gì`, `gìn`, `gỉ`), distinct from `ghì`. The validator al
   already enabled). Revisit with parity testing before claiming distinct
   semantics.
 
+## Macros / gõ tắt (Phase 4)
+
+This resolves the spec's Open Question #9 (where macro expansion fires in the
+pipeline).
+
+**Firing point: word commit, against the RAW typed buffer.** A macro is
+matched against `Engine.rawKeys` — the literal ASCII keys typed since the
+last boundary — not against the rendered/folded Vietnamese text. Matching
+happens at commit (a boundary character, or an explicit flush) and is
+case-sensitive and exact (no prefix/fuzzy matching). A macro never fires
+mid-syllable.
+
+**Precedence: macros win over everything else.** Inside `Engine.finalize`,
+the macro check runs first, BEFORE Vietnamese rendering and BEFORE
+restore-if-invalid. If the raw word matches an enabled macro, the entire
+on-screen composed word (`prevUnits.count` code units — not a diffed
+prefix) is deleted and replaced by the macro's expansion; restore-if-invalid
+never runs for a macro hit. This means a macro can override what would
+otherwise be a perfectly valid Vietnamese syllable (e.g. a macro trigger
+`as` beats Telex's `as` → `á`).
+
+**Two-path model**, because Vietnamese rendering only happens while
+Vietnamese input is active:
+- **Vietnamese-mode**: inside `Engine.finalize(boundary:)`, gated by
+  `EngineConfig.macrosEnabled`. On a hit, the boundary character (if any) is
+  appended to the synthesized replacement text, since the whole edit
+  (backspace + text) replaces everything, including the boundary, on screen.
+- **English-mode** (Vietnamese input off): a separate, independent buffer
+  (`Engine.englishRawKeys`) and entry points (`processInactive`,
+  `flushInactive`, `resetInactive`), gated by BOTH `macrosEnabled` AND
+  `macrosExpandWhenVietnameseOff` (checked in `EngineController.handle`, not
+  inside `Engine`, so `Engine` doesn't need to know why it was called). Every
+  keystroke passes through physically in this mode — `suppress` is always
+  `false` — so the boundary character is delivered by the OS itself and must
+  NOT be duplicated into the returned edit's text.
+
+**Duplicate triggers: last one wins.** `MacroTable.init` first drops
+disabled rules, then builds a `[String: MacroRule]` dictionary from the
+survivors in order — so if two *enabled* rules share a trigger, the later
+one in the list overwrites the earlier one. A disabled rule is simply
+excluded before this step; it cannot "clear" an earlier enabled rule with
+the same trigger by appearing later in the list. An **empty trigger** is
+rejected too (both in `MacroTable.init` and in `parseTabSeparated`): it
+would otherwise match the empty raw buffer and fire on every bare commit.
+`MacroStore.importFile` likewise refuses to replace the user's macros with
+an empty parse — a file that is neither valid JSON nor a tab-separated macro
+list surfaces the decode error instead of silently wiping the list.
+
+**autoCapitalize semantics, and why it's dormant.** `Engine` tracks
+`atSentenceStart`: `.`, `!`, `?`, and newline boundaries start a new
+sentence; committing any word (via any other boundary) ends it. A macro's
+replacement gets its first character uppercased only when ALL of: the
+per-macro `MacroRule.autoCapitalize` is on, the global
+`EngineConfig.macroAutoCapitalize` is on, the cursor is at a sentence start,
+and the replacement's first character is a lowercase letter
+(`MacroTable.expandedText`). `MacroRule.autoCapitalize` defaults to `false`
+per macro — so even though the global toggle defaults to `true` (mirroring
+OpenKey's own default) and `AppModel.macrosEnabled` defaults to `true` (an
+existing pre-Phase-4 UI default we keep, per "ships dormant unless already
+configured"), the feature has no observable effect until a user (a) adds at
+least one macro, and, for capitalization specifically, (b) opts that macro
+into `autoCapitalize` explicitly.
+
+**Legacy import.** `MacroTable.parseTabSeparated` reads OpenKey-style
+`trigger<TAB>replacement` files: blank lines and lines without a tab are
+skipped, and a trailing `\r` is trimmed per line (splitting is done on the
+raw LINE FEED *scalar*, not the `Character` "\n", because Swift's grapheme
+clustering merges a CRLF pair into a single `Character` that would never
+match a bare "\n" separator). `MacroStore.importFile` tries JSON first and
+falls back to this parser on failure, so both `.json` exports and legacy
+`.txt` files work from the same "Nhập gõ tắt…" menu item.
+
 ## Nucleus × coda rime (spec §5.3)
 
 A nucleus that ends in a semivowel offglide (falling diphthongs/triphthongs:

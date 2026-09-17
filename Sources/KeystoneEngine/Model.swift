@@ -98,19 +98,39 @@ public struct EngineConfig: Sendable, Equatable, Codable {
     /// pp→ph, qq→qu, tt→th). Off by default (design spec Part A §2.6). Note
     /// dd→đ is a separate, always-on rule and is not gated by this flag.
     public var quickTelex: Bool
+    /// "Cho phép gõ tắt" (Phase 4, macro expansion). Off by default — the
+    /// feature ships dormant until explicitly turned on.
+    public var macrosEnabled: Bool
+    /// "Gõ tắt cả khi tắt tiếng Việt" — also let macros fire while Vietnamese
+    /// input is off (routes through `Engine.processInactive`/`flushInactive`).
+    public var macrosExpandWhenVietnameseOff: Bool
+    /// Global switch for macro-triggered sentence-start capitalization. A
+    /// macro also needs its own `MacroRule.autoCapitalize` on for this to
+    /// take effect — see `MacroTable.expandedText`.
+    public var macroAutoCapitalize: Bool
+    /// The configured macro rules (see `MacroRule`/`MacroTable`).
+    public var macros: [MacroRule]
 
     public init(
         inputMethod: InputMethod = .telex,
         codeTable: CodeTable = .unicode,
         orthography: Orthography = .modern,
         restoreIfInvalid: Bool = true,
-        quickTelex: Bool = false
+        quickTelex: Bool = false,
+        macrosEnabled: Bool = false,
+        macrosExpandWhenVietnameseOff: Bool = false,
+        macroAutoCapitalize: Bool = true,
+        macros: [MacroRule] = []
     ) {
         self.inputMethod = inputMethod
         self.codeTable = codeTable
         self.orthography = orthography
         self.restoreIfInvalid = restoreIfInvalid
         self.quickTelex = quickTelex
+        self.macrosEnabled = macrosEnabled
+        self.macrosExpandWhenVietnameseOff = macrosExpandWhenVietnameseOff
+        self.macroAutoCapitalize = macroAutoCapitalize
+        self.macros = macros
     }
 }
 

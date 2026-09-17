@@ -22,11 +22,30 @@
 // Phase 1 supports Telex only; `config.inputMethod` is not yet consulted.
 
 public final class Engine {
-    public var config: EngineConfig
-    public init(config: EngineConfig) { self.config = config }
+    public var config: EngineConfig {
+        // Rebuild the macro dictionary only when config changes (off the
+        // per-keystroke hot path), not on every keystroke.
+        didSet { macroTable = MacroTable(config.macros) }
+    }
+    private var macroTable: MacroTable
+
+    public init(config: EngineConfig) {
+        self.config = config
+        self.macroTable = MacroTable(config.macros)
+    }
 
     private var rawKeys: [Character] = []   // the composing word's raw keys
     private var prevUnits: [UInt16] = []    // active table's code units currently "on screen"
+
+    /// Whether the NEXT committed word starts a new sentence — used only by
+    /// macro `autoCapitalize` (see `MacroTable.expandedText`). A `.`, `!`,
+    /// `?`, or newline boundary starts a new sentence; committing any word
+    /// (with any other boundary) means the next one does not.
+    private var atSentenceStart = true
+    /// Raw keys typed while Vietnamese input is off — the English-mode macro
+    /// buffer (see `processInactive`/`flushInactive`), independent of
+    /// `rawKeys` above (which only composes while active).
+    private var englishRawKeys: [Character] = []
 
     public func process(_ key: KeyInput) -> EngineResult {
         switch key.kind {
@@ -46,7 +65,81 @@ public final class Engine {
     }
 
     public func flush() -> EngineResult { finalize(boundary: nil) }
-    public func reset() { rawKeys = []; prevUnits = [] }
+    public func reset() {
+        rawKeys = []; prevUnits = []
+        atSentenceStart = true
+        englishRawKeys = []
+    }
+
+    // MARK: - English-mode macros (Vietnamese input off)
+    //
+    // While Vietnamese input is off, keystrokes are never composed/rendered —
+    // they pass through physically. But a completed macro trigger can still
+    // be replaced at its boundary: this buffer tracks the raw keys of the
+    // current word, separately from `rawKeys`/`rerender`.
+
+    /// One keystroke while Vietnamese input is off. Letters/numbers extend
+    /// the buffer (always a physical passthrough, `.none`); anything else is
+    /// a boundary that may fire a macro.
+    public func processInactive(_ key: KeyInput) -> EngineResult {
+        switch key.kind {
+        case .backspace:
+            if !englishRawKeys.isEmpty { englishRawKeys.removeLast() }
+            return .none   // the physical Delete always passes through
+        case .character(let ch):
+            if ch.isLetter || ch.isNumber {
+                englishRawKeys.append(ch)
+                return .none
+            }
+            // Boundary key (e.g. space/punctuation) — itself a physical
+            // passthrough, so its own text is never part of the edit.
+            return matchEnglishMacro(boundary: ch)
+        }
+    }
+
+    /// Boundary handler for nav/commit keys (Return/Tab/arrows/...), which
+    /// carry no character of their own to gate on.
+    public func flushInactive() -> EngineResult {
+        matchEnglishMacro(boundary: nil)
+    }
+
+    public func resetInactive() {
+        englishRawKeys = []
+    }
+
+    /// Shared match+clear logic for `processInactive`'s boundary case and
+    /// `flushInactive`. Always clears the buffer; only returns an edit
+    /// (backspace the trigger + insert the expansion) on a hit.
+    private func matchEnglishMacro(boundary: Character?) -> EngineResult {
+        let raw = String(englishRawKeys)
+        let hadWord = !englishRawKeys.isEmpty
+        let triggerLength = englishRawKeys.count
+        englishRawKeys = []
+
+        guard config.macrosEnabled, let rule = macroTable.match(raw, englishMode: true) else {
+            updateSentenceStart(boundary: boundary, hadWord: hadWord)
+            return .none
+        }
+        let expanded = MacroTable.expandedText(
+            for: rule, atSentenceStart: atSentenceStart, globalAutoCapitalize: config.macroAutoCapitalize)
+        let text = Converter.convert(expanded, from: .unicode, to: config.codeTable)
+        updateSentenceStart(boundary: boundary, hadWord: hadWord)
+        return EngineResult(backspaceCount: triggerLength, text: text)
+    }
+
+    /// Sentence-start tracking for macro `autoCapitalize` only — kept small
+    /// and separate from the rest of `finalize`'s logic on purpose.
+    private func updateSentenceStart(boundary: Character?, hadWord: Bool) {
+        if let b = boundary, isSentenceTerminator(b) {
+            atSentenceStart = true
+        } else if hadWord {
+            atSentenceStart = false
+        }
+    }
+
+    private func isSentenceTerminator(_ ch: Character) -> Bool {
+        ch == "." || ch == "!" || ch == "?" || ch.isNewline
+    }
 
     private func interpret(_ keys: [Character]) -> Composition {
         switch config.inputMethod {
@@ -84,8 +177,25 @@ public final class Engine {
         return comp
     }
 
-    // commit: apply restore-if-invalid, produce the edit that turns on-screen -> final (+ optional boundary char)
+    // commit: apply macros, then restore-if-invalid, produce the edit that
+    // turns on-screen -> final (+ optional boundary char)
     private func finalize(boundary: Character?) -> EngineResult {
+        let hadWord = !rawKeys.isEmpty
+
+        // Macros fire at commit against the RAW typed word, before Vietnamese
+        // rendering or restore-if-invalid even run — see DECISIONS.md
+        // "Macros / gõ tắt". A hit fully replaces whatever is on screen.
+        if config.macrosEnabled, let rule = macroTable.match(String(rawKeys), englishMode: false) {
+            let expanded = MacroTable.expandedText(
+                for: rule, atSentenceStart: atSentenceStart, globalAutoCapitalize: config.macroAutoCapitalize)
+            var text = Converter.convert(expanded, from: .unicode, to: config.codeTable)
+            if let b = boundary { text.append(b) }
+            let bs = prevUnits.count
+            rawKeys = []; prevUnits = []
+            updateSentenceStart(boundary: boundary, hadWord: hadWord)
+            return EngineResult(backspaceCount: bs, text: text)
+        }
+
         let comp = downgradeOpenUoHorn(interpret(rawKeys))
         let table = outputTable(for: config.codeTable)
         let finalUnits: [UInt16]
@@ -99,6 +209,7 @@ public final class Engine {
         var text = table.decode(Array(finalUnits[common...]))
         if let b = boundary { text.append(b) }
         rawKeys = []; prevUnits = []
+        updateSentenceStart(boundary: boundary, hadWord: hadWord)
         return EngineResult(backspaceCount: bs, text: text)
     }
 

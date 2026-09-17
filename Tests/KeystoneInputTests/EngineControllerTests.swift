@@ -88,3 +88,76 @@ struct EngineControllerTests {
         #expect(edit == nil)
     }
 }
+
+// MARK: - English-mode macros (Vietnamese input off, Phase 4 "gõ tắt")
+
+/// Feed `text` through a deactivated `EngineController` (`setActive(false)`)
+/// and reconstruct the on-screen result. Every VN-off key passes through
+/// physically (suppress is always false in this mode), so the accumulator
+/// must model BOTH the literal typed character AND any synthetic
+/// backspace+text edit `EngineController` returns alongside it. The edit is
+/// injected by the tap synchronously, before the untouched original event is
+/// delivered by the OS, so it is applied first — see Sources/KeystoneInput/
+/// EngineController.swift and Sources/KeystoneEngine/Engine.swift
+/// (`processInactive`/`flushInactive`).
+private func typeInactive(_ text: String, config: EngineConfig) -> String {
+    let c = EngineController(config: config)
+    c.setActive(false)
+    var acc: [Unicode.Scalar] = []
+    func apply(_ e: EngineResult?) {
+        guard let e else { return }
+        if e.backspaceCount > 0 { acc.removeLast(min(e.backspaceCount, acc.count)) }
+        acc.append(contentsOf: e.text.unicodeScalars)
+    }
+    for ch in text {
+        let (suppress, edit, _) = c.handle(letter(ch))
+        #expect(suppress == false)
+        apply(edit)
+        acc.append(contentsOf: String(ch).unicodeScalars)   // the physical passthrough key
+    }
+    let (suppress, edit, _) = c.handle(RETURN)
+    #expect(suppress == false)
+    apply(edit)
+    return String(String.UnicodeScalarView(acc))
+}
+
+@Suite("EngineControllerEnglishModeMacros")
+struct EngineControllerEnglishModeMacrosTests {
+    @Test func macroExpandsAtBoundaryWhenBothFlagsOn() {
+        let config = EngineConfig(
+            macrosEnabled: true,
+            macrosExpandWhenVietnameseOff: true,
+            macros: [MacroRule(trigger: "brb", replacement: "be right back", expandInEnglishMode: true)]
+        )
+        #expect(typeInactive("brb ", config: config) == "be right back ")
+    }
+
+    @Test func macroWithoutExpandInEnglishModeDoesNotFire() {
+        let config = EngineConfig(
+            macrosEnabled: true,
+            macrosExpandWhenVietnameseOff: true,
+            macros: [MacroRule(trigger: "brb", replacement: "be right back", expandInEnglishMode: false)]
+        )
+        #expect(typeInactive("brb ", config: config) == "brb ")
+    }
+
+    @Test func passthroughStaysUnchangedWhenFlagsAreOff() {
+        let config = EngineConfig(
+            macrosEnabled: false,
+            macrosExpandWhenVietnameseOff: false,
+            macros: [MacroRule(trigger: "brb", replacement: "be right back", expandInEnglishMode: true)]
+        )
+        #expect(typeInactive("brb ", config: config) == "brb ")
+    }
+
+    @Test func macrosEnabledButExpandWhenVietnameseOffIsOffKeepsExistingBehavior() {
+        // Only one of the two flags set: EngineController must keep the exact
+        // pre-Phase-4 behavior (`inactivePassesThrough`), not partially route.
+        let config = EngineConfig(
+            macrosEnabled: true,
+            macrosExpandWhenVietnameseOff: false,
+            macros: [MacroRule(trigger: "brb", replacement: "be right back", expandInEnglishMode: true)]
+        )
+        #expect(typeInactive("brb ", config: config) == "brb ")
+    }
+}

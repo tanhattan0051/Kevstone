@@ -6,6 +6,7 @@ import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
 import os
+import KeystoneEngine
 
 struct Macro: Identifiable, Codable, Hashable {
     var id = UUID()
@@ -14,6 +15,19 @@ struct Macro: Identifiable, Codable, Hashable {
     var enabled: Bool = true
     /// "Gõ tắt cả khi tắt tiếng Việt" — expand even when Vietnamese input is off.
     var expandInEnglishMode: Bool = false
+    /// "Tự động viết hoa dòng đầu câu" — capitalize the replacement's first
+    /// letter at a sentence start (also needs AppModel's global toggle on).
+    var autoCapitalize: Bool = false
+
+    func toRule() -> MacroRule {
+        MacroRule(
+            trigger: trigger,
+            replacement: replacement,
+            enabled: enabled,
+            expandInEnglishMode: expandInEnglishMode,
+            autoCapitalize: autoCapitalize
+        )
+    }
 }
 
 @Observable
@@ -23,6 +37,11 @@ final class MacroStore {
     private static let log = Logger(subsystem: "com.tanta.keystone", category: "MacroStore")
 
     var macros: [Macro] = []
+
+    /// Notified after every `save()` (success or failure — the in-memory
+    /// `macros` list is authoritative regardless), so the app can re-push
+    /// the current macro set into `EngineConfig`. Set by `AppModel.bootstrap()`.
+    var onChange: (() -> Void)?
 
     private let fileURL: URL = {
         let base = FileManager.default
@@ -83,12 +102,37 @@ final class MacroStore {
         } catch {
             Self.log.error("save macros failed (\(self.fileURL.path, privacy: .public)): \(error.localizedDescription, privacy: .public)")
         }
+        onChange?()
     }
 
+    /// Accepts either our own JSON export or a legacy OpenKey macro file
+    /// (tab-separated `trigger<TAB>replacement` per line, e.g. a `.txt`
+    /// export). Content is sniffed by trying JSON first — if decoding
+    /// throws, the same bytes are re-parsed as tab-separated text rather
+    /// than treating the JSON failure as a hard error.
     func importFile(_ url: URL) throws {
         let data = try Data(contentsOf: url)
-        let decoded = try JSONDecoder().decode([Macro].self, from: data)
-        macros = decoded
+        do {
+            macros = try JSONDecoder().decode([Macro].self, from: data)
+        } catch let jsonError {
+            guard let text = String(data: data, encoding: .utf8) else {
+                throw jsonError   // not JSON and not decodable text — surface the original failure
+            }
+            let parsed = MacroTable.parseTabSeparated(text)
+            // A file that is neither valid JSON nor a tab-separated macro list
+            // must NOT silently wipe the user's existing macros — surface the
+            // original decode failure instead of replacing with an empty list.
+            guard !parsed.isEmpty else { throw jsonError }
+            macros = parsed.map { rule in
+                Macro(
+                    trigger: rule.trigger,
+                    replacement: rule.replacement,
+                    enabled: rule.enabled,
+                    expandInEnglishMode: rule.expandInEnglishMode,
+                    autoCapitalize: rule.autoCapitalize
+                )
+            }
+        }
         save()
     }
 
@@ -165,7 +209,7 @@ struct MacrosView: View {
                 Spacer()
 
                 Menu {
-                    Button("Nhập từ JSON…") { importJSON() }
+                    Button("Nhập gõ tắt (JSON hoặc OpenKey .txt)…") { importJSON() }
                     Button("Xuất ra JSON…") { exportJSON() }
                 } label: {
                     Image(systemName: "square.and.arrow.up")
@@ -178,7 +222,7 @@ struct MacrosView: View {
 
     private func importJSON() {
         let panel = NSOpenPanel()
-        panel.allowedContentTypes = [.json]
+        panel.allowedContentTypes = [.json, .plainText]
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         guard panel.runModal() == .OK, let url = panel.url else { return }
@@ -227,6 +271,7 @@ private struct MacroEditor: View {
             HStack(spacing: 20) {
                 Toggle("Bật", isOn: $macro.enabled)
                 Toggle("Mở rộng cả khi tắt tiếng Việt", isOn: $macro.expandInEnglishMode)
+                Toggle("Tự động viết hoa dòng đầu câu", isOn: $macro.autoCapitalize)
             }
         }
     }

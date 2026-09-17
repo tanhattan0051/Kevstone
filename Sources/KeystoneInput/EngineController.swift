@@ -36,7 +36,34 @@ public final class EngineController: @unchecked Sendable {
     /// Returns (suppress original event?, edit to execute or nil, decision).
     public func handle(_ k: RawKey) -> (suppress: Bool, edit: EngineResult?, decision: KeyDecision) {
         lock.withLock {
-            if !active { return (false, nil, .passthrough) }
+            if !active {
+                // English-mode macros (Phase 4, "gõ tắt cả khi tắt tiếng Việt")
+                // only route through the engine when BOTH flags are on;
+                // otherwise keep the exact pre-Phase-4 passthrough behavior.
+                guard engine.config.macrosEnabled && engine.config.macrosExpandWhenVietnameseOff else {
+                    return (false, nil, .passthrough)
+                }
+                let d = KeyTranslator.decide(k)
+                switch d {
+                case .character(let ch):
+                    let r = engine.processInactive(KeyInput(ch))
+                    let noop = r.backspaceCount == 0 && r.text.isEmpty
+                    return (false, noop ? nil : r, d)   // physical key always passes through
+                case .backspace:
+                    let r = engine.processInactive(.backspace)
+                    let noop = r.backspaceCount == 0 && r.text.isEmpty
+                    return (false, noop ? nil : r, d)
+                case .commitPassthrough:
+                    let r = engine.flushInactive()
+                    let noop = r.backspaceCount == 0 && r.text.isEmpty
+                    return (false, noop ? nil : r, d)
+                case .resetPassthrough:
+                    engine.resetInactive()
+                    return (false, nil, d)
+                case .passthrough:
+                    return (false, nil, d)
+                }
+            }
             let d = KeyTranslator.decide(k)
             switch d {
             case .character(let ch):
