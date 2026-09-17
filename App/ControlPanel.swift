@@ -219,7 +219,7 @@ private struct AboutPane: View {
                 }
             }
             Section {
-                if let url = URL(string: "https://github.com/tanhattan0051/keystone") {
+                if let url = URL(string: "https://github.com/tanhattan0051/Kevstone") {
                     Link("Trang chủ Keystone", destination: url)
                 }
             }
