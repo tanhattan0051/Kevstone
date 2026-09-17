@@ -84,9 +84,15 @@ Bounds added to protect common English words (from the full Telex sweep):
 NEW, separate opt-in flag — **default `false`** — that further EXTENDS the
 non-adjacent placement `allowFreeToneMark` already gates. It does not replace
 `allowFreeToneMark`; both flags are independent and a user can have either,
-both, or neither on. Being off by default means the ~251-case corpus and the
-English-word protection described under "Positional (non-adjacent) marks"
-above are completely untouched unless a user explicitly turns it on.
+both, or neither on. `EngineConfig.freeMarkAcrossCoda` stays **`false`** by
+default so the ~251-case corpus and the English-word protection described
+under "Positional (non-adjacent) marks" above are completely untouched at the
+engine/test level. **The app (`AppModel`), however, ships it ON by default**
+(the author types this "bỏ dấu ở cuối" style: `tana→tân`, `dadng→đang`),
+accepting the English-word tradeoff (`mama→mâm`); a user can turn it off in
+the Control Panel. Keeping the two defaults split lets the corpus keep
+exercising the English-safe behavior while the shipped app matches how the
+author actually types.
 
 **What it extends, when ON:**
 - **Telex circumflex across a coda** (`Telex.swift` case 7): the existing

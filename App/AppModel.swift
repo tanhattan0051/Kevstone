@@ -139,13 +139,15 @@ final class AppModel {
         }
     }
 
-    /// "Bỏ dấu ở cuối từ (kể cả sau phụ âm)" (Phase 4) — an opt-in extension
-    /// of `allowFreeToneMark` that also lets Telex circumflex land across a
-    /// consonant coda and lets Telex/VNI đ stroke a still-open syllable's
-    /// onset d (see DECISIONS.md "Bỏ dấu ở cuối từ / freeMarkAcrossCoda
-    /// (Phase 4)"). Off by default — ships dormant, accepted English-word
-    /// tradeoff only applies once a user turns it on.
-    var freeMarkAcrossCoda: Bool = AppModel.loadBool(Keys.freeMarkAcrossCoda, default: false) {
+    /// "Bỏ dấu ở cuối từ (kể cả sau phụ âm)" (Phase 4) — extends
+    /// `allowFreeToneMark` so Telex circumflex can land across a consonant
+    /// coda and Telex/VNI đ can stroke a still-open syllable's onset d (see
+    /// DECISIONS.md "Bỏ dấu ở cuối từ / freeMarkAcrossCoda (Phase 4)").
+    /// ON by default at the app level (the author types this "bỏ dấu ở cuối"
+    /// style — tana→tân, dadng→đang), with the accepted English-word tradeoff
+    /// (mama→mâm). Note `EngineConfig.freeMarkAcrossCoda` still defaults false
+    /// so the test corpus keeps exercising the English-safe behavior.
+    var freeMarkAcrossCoda: Bool = AppModel.loadBool(Keys.freeMarkAcrossCoda, default: true) {
         didSet {
             UserDefaults.standard.set(freeMarkAcrossCoda, forKey: Keys.freeMarkAcrossCoda)
             pushConfig()
@@ -227,7 +229,7 @@ final class AppModel {
     }
 
     /// "Cho phép gõ tắt" (Gõ tắt tab)
-    var macrosEnabled: Bool = AppModel.loadBool(Keys.macrosEnabled, default: true) {
+    var macrosEnabled: Bool = AppModel.loadBool(Keys.macrosEnabled, default: false) {
         didSet {
             UserDefaults.standard.set(macrosEnabled, forKey: Keys.macrosEnabled)
             pushConfig()
@@ -522,7 +524,7 @@ final class AppModel {
 
         spellCheck = true
         allowFreeToneMark = true
-        freeMarkAcrossCoda = false
+        freeMarkAcrossCoda = true
         autoCapitalize = false
         quickStartConsonant = false
         quickEndConsonant = false
@@ -531,7 +533,7 @@ final class AppModel {
         autoFixSuggestion = false
         sendEachKeystroke = false
         switchKeyModifier = .controlShift
-        macrosEnabled = true
+        macrosEnabled = false
         macrosExpandWhenVietnameseOff = false
         macroAutoCapitalize = true
         runAtLogin = false
