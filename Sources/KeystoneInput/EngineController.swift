@@ -57,6 +57,10 @@ public final class EngineController: @unchecked Sendable {
                     let r = engine.flushInactive()
                     let noop = r.backspaceCount == 0 && r.text.isEmpty
                     return (false, noop ? nil : r, d)
+                case .commitNewline:
+                    let r = engine.flushInactiveNewline()
+                    let noop = r.backspaceCount == 0 && r.text.isEmpty
+                    return (false, noop ? nil : r, d)
                 case .resetPassthrough:
                     engine.resetInactive()
                     return (false, nil, d)
@@ -78,6 +82,10 @@ public final class EngineController: @unchecked Sendable {
                 let r = engine.flush()
                 let noop = r.backspaceCount == 0 && r.text.isEmpty
                 return (false, noop ? nil : r, d)   // finalize word, but let the nav key pass through
+            case .commitNewline:
+                let r = engine.flushNewline()
+                let noop = r.backspaceCount == 0 && r.text.isEmpty
+                return (false, noop ? nil : r, d)   // finalize word + start new sentence, let Return pass through
             case .resetPassthrough:
                 engine.reset()
                 return (false, nil, d)

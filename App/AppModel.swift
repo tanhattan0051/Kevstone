@@ -91,19 +91,29 @@ final class AppModel {
 
     /// Output code table. App default is **Unicode dựng sẵn** (`.unicode`, NFC
     /// precomposed): 1 code-unit per grapheme, so the tap's `backspaceCount`
-    /// (counted in code units) always matches how apps delete — the
-    /// double-char/backspace-safe choice across apps (design spec E.2/E.3).
+    /// (counted in code units) always matches how apps delete a grapheme per
+    /// Delete — the double-char/backspace-safe choice across apps (design spec
+    /// E.2/E.3).
     ///
     /// `.unicodeCompound` ("Unicode tổ hợp", combining diacritics) spells one
     /// grapheme as base + combining mark(s) — 2-3 code units — so on a restore
-    /// or diacritic edit the code-unit backspace count no longer matches apps
-    /// that delete a whole grapheme per Delete, and a char gets dropped or
-    /// doubled (e.g. `task`→`tassk`, `google`→`gooogle`). It stays available
-    /// in the Control Panel for the legacy software that needs decomposed
-    /// Unicode, but must NOT be the default. See DECISIONS.md "Bảng mã".
+    /// or diacritic edit the code-unit backspace count can under- or over-delete
+    /// in apps that delete a whole grapheme per Delete, dropping or duplicating
+    /// a character. It stays available in the Control Panel for legacy software
+    /// that needs decomposed Unicode, but must NOT be the default.
+    /// See DECISIONS.md "Bảng mã".
     var codeTable: CodeTable = AppModel.loadRaw(Keys.codeTable, default: .unicode) {
         didSet {
-            UserDefaults.standard.set(codeTable.rawValue, forKey: Keys.codeTable)
+            // Persist to the GLOBAL default only on a real (manual) change, not
+            // while applying a per-app restore — otherwise a remembered per-app
+            // table silently overwrites the user's chosen startup default (the
+            // leak path that let a transient default stick across launches).
+            // Per-app values live in appstates.json via persistPerAppStateIfNeeded,
+            // which is guarded by the same flag. pushConfig always runs so the
+            // engine reflects the (restored or manual) table immediately.
+            if !applyingPerAppState {
+                UserDefaults.standard.set(codeTable.rawValue, forKey: Keys.codeTable)
+            }
             pushConfig()
             persistPerAppStateIfNeeded()
         }
@@ -132,7 +142,14 @@ final class AppModel {
         }
     }
 
-    /// "Tự khôi phục phím với từ sai"
+    /// "Tự khôi phục phím với từ sai" — default ON: at commit, a composed word
+    /// that is not a legal Vietnamese syllable reverts to its raw keystrokes.
+    /// This is the "auto-drop the diacritic when the word doesn't need one"
+    /// behavior: an English/informal word transformed by Telex (`hehe`→hêh,
+    /// `task`→ták) is invalid, so it reverts to the literal `hehe`/`task`. It
+    /// was briefly defaulted OFF while an event-tap duplicate-key-down bug made
+    /// the revert edits corrupt (`task`→`tassk`); that bug is fixed (synthetic
+    /// events now post via `CGEventPost`, see `TapSink`), so restore is back on.
     var restoreIfInvalid: Bool = AppModel.loadBool(Keys.restoreIfInvalid, default: true) {
         didSet {
             UserDefaults.standard.set(restoreIfInvalid, forKey: Keys.restoreIfInvalid)
@@ -152,13 +169,21 @@ final class AppModel {
     }
 
     /// "Bỏ dấu ở cuối từ (kể cả sau phụ âm)" (Phase 4) — extends
-    /// `allowFreeToneMark` so Telex circumflex can land across a consonant
-    /// coda and Telex/VNI đ can stroke a still-open syllable's onset d (see
-    /// DECISIONS.md "Bỏ dấu ở cuối từ / freeMarkAcrossCoda (Phase 4)").
-    /// ON by default at the app level (the author types this "bỏ dấu ở cuối"
-    /// style — tana→tân, dadng→đang), with the accepted English-word tradeoff
-    /// (mama→mâm). Note `EngineConfig.freeMarkAcrossCoda` still defaults false
-    /// so the test corpus keeps exercising the English-safe behavior.
+    /// `allowFreeToneMark` so a Telex quality mark (circumflex/horn/breve) can
+    /// land across a consonant coda onto an earlier vowel, and Telex/VNI đ can
+    /// stroke a still-open syllable's onset d (see DECISIONS.md
+    /// "Bỏ dấu ở cuối từ / freeMarkAcrossCoda (Phase 4)").
+    ///
+    /// Default **ON** (the author's "bỏ dấu ở cuối" input style — `tana`→tân,
+    /// `dadng`→đang): a quality mark (circumflex/horn/breve) may land across a
+    /// consonant coda onto an earlier vowel. Accepted tradeoff: an English/
+    /// informal word with the same V-C-V shape also transforms (`hehe`→hêh,
+    /// `mama`→mâm) — the engine cannot tell it apart from `tana`→tân without a
+    /// dictionary. The clean way to keep BOTH (free-mark style AND `hehe`
+    /// literal) is to re-enable `restoreIfInvalid`, which reverts the invalid
+    /// `hêh` back to raw `hehe`; that path is currently off pending the
+    /// event-tap duplicate-keydown fix (see DECISIONS.md). `EngineConfig`
+    /// still defaults it false so the corpus keeps the English-safe behavior.
     var freeMarkAcrossCoda: Bool = AppModel.loadBool(Keys.freeMarkAcrossCoda, default: true) {
         didSet {
             UserDefaults.standard.set(freeMarkAcrossCoda, forKey: Keys.freeMarkAcrossCoda)

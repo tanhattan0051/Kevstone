@@ -140,8 +140,23 @@ public final class EventTapController: @unchecked Sendable {
             // passes through untouched) — acceptable on the hot path, same
             // cost class as EngineController's config lock.
             let b = behaviorLock.withLock { behavior }
-            let sink = TapSink(source: synthSource, proxy: proxy, textOnKeyDownOnly: b.textOnKeyDownOnly)
-            KeystrokeExecutor(sink: sink).execute(edit, eachGrapheme: b.sendEachKeystroke)
+            // Post the synthetic backspaces/text AFTER this callback returns,
+            // not during it. Injecting key events (via CGEventPost) while we
+            // return nil to suppress the physical key makes the window server
+            // re-deliver that physical key to our tap — a duplicate key-down
+            // that corrupts the word (a Telex tone key seen twice: task→tassk,
+            // cài→cafi). Scheduling the injection on the tap's own run loop
+            // runs it once this callback has returned and the suppression has
+            // settled, so no echo is generated. Same thread, so ordering with
+            // the next keystroke is preserved.
+            let src = synthSource
+            if let rl = tapRunLoop {
+                CFRunLoopPerformBlock(rl, CFRunLoopMode.commonModes.rawValue) {
+                    let sink = TapSink(source: src, textOnKeyDownOnly: b.textOnKeyDownOnly)
+                    KeystrokeExecutor(sink: sink).execute(edit, eachGrapheme: b.sendEachKeystroke)
+                }
+                CFRunLoopWakeUp(rl)
+            }
         }
         return suppress ? nil : Unmanaged.passUnretained(event)
     }
@@ -172,7 +187,6 @@ private func keystoneTapCallback(proxy: CGEventTapProxy, type: CGEventType, even
 
 private struct TapSink: EventSink {
     let source: CGEventSource?
-    let proxy: CGEventTapProxy
     /// "Sửa lỗi gợi ý" (`autoFixSuggestion`, default ON): when true, the
     /// Unicode string is set on the keyDown event only — the keyUp is posted
     /// bare — which is the documented remedy for browsers/Excel doubling
@@ -202,7 +216,15 @@ private struct TapSink: EventSink {
         for e in [down, up] {
             e.flags = []
             e.setIntegerValueField(.eventSourceUserData, value: EventTapController.selfTag)
-            e.tapPostEvent(proxy)
+            // Post via CGEventPost, NOT tapPostEvent(proxy): injecting a
+            // synthetic key event through the tap proxy from inside the keyDown
+            // callback (while we suppress the physical key) makes the window
+            // server re-deliver that physical key to our tap — a duplicate
+            // key-down that corrupts the composing word (e.g. a Telex tone key
+            // seen twice: `task`→`tassk`). CGEventPost re-enters the session tap
+            // instead, where the `selfTag` guard drops our own events, so there
+            // is no re-delivery. See DECISIONS.md "Duplicate key-down".
+            e.post(tap: .cgSessionEventTap)
         }
     }
 
@@ -211,6 +233,6 @@ private struct TapSink: EventSink {
         guard let e = CGEvent(keyboardEventSource: source, virtualKey: virtualKey, keyDown: keyDown) else { return }
         e.flags = []
         e.setIntegerValueField(.eventSourceUserData, value: EventTapController.selfTag)
-        e.tapPostEvent(proxy)
+        e.post(tap: .cgSessionEventTap)   // see postText: CGEventPost, not tapPostEvent(proxy)
     }
 }

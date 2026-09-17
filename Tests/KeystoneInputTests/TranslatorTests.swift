@@ -29,7 +29,19 @@ struct TranslatorTests {
     }
 
     @Test func returnKey() {
-        #expect(KeyTranslator.decide(RawKey(keyCode: 36, chars: "\r")) == .commitPassthrough)
+        // Return finalizes the word AND starts a new sentence for
+        // autoCapitalize — see Contracts.swift's `.commitNewline` doc comment.
+        #expect(KeyTranslator.decide(RawKey(keyCode: 36, chars: "\r")) == .commitNewline)
+    }
+
+    @Test func keypadEnterKey() {
+        #expect(KeyTranslator.decide(RawKey(keyCode: 76, chars: "\r")) == .commitNewline)
+    }
+
+    @Test func tabKeyStaysCommitPassthrough() {
+        // Tab (and the other nav/commit keys) finalize the word but do NOT
+        // start a new sentence — only Return/KeypadEnter do that.
+        #expect(KeyTranslator.decide(RawKey(keyCode: 48, chars: "")) == .commitPassthrough)
     }
 
     @Test func arrowLeft() {

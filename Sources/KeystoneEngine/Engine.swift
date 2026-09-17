@@ -65,6 +65,19 @@ public final class Engine {
     }
 
     public func flush() -> EngineResult { finalize(boundary: nil) }
+
+    /// Return/KeypadEnter: finalize the current word like `flush()`, but ALSO
+    /// force `atSentenceStart = true` — a newline starts a new sentence, even
+    /// though the physical Return key (not this method) is what actually
+    /// inserts the `\n`. `finalize(boundary: nil)` commits the pending word
+    /// without emitting any boundary character, so no `\n` ever ends up in
+    /// the returned edit text.
+    public func flushNewline() -> EngineResult {
+        let r = finalize(boundary: nil)
+        atSentenceStart = true
+        return r
+    }
+
     public func reset() {
         rawKeys = []; prevUnits = []
         // NOT `true`: a reset fires on a caret move / app switch / nav key,
@@ -108,6 +121,15 @@ public final class Engine {
     /// carry no character of their own to gate on.
     public func flushInactive() -> EngineResult {
         matchEnglishMacro(boundary: nil)
+    }
+
+    /// Return/KeypadEnter counterpart of `flushInactive()` — see
+    /// `flushNewline()`'s doc comment for why `atSentenceStart` is forced
+    /// `true` here without emitting a `\n` of its own.
+    public func flushInactiveNewline() -> EngineResult {
+        let r = matchEnglishMacro(boundary: nil)
+        atSentenceStart = true
+        return r
     }
 
     public func resetInactive() {

@@ -141,6 +141,57 @@ struct AutoCapitalizeTests {
     }
 }
 
+// MARK: - Sentence auto-capitalize after Return/KeypadEnter (commitNewline)
+
+/// Replay literal keys AND explicit Enter presses through a fresh `Engine`,
+/// reconstructing the on-screen text. `typeThroughEngine` above only calls
+/// `engine.process`, so it can't inject a Return — this helper hands the
+/// caller the engine directly so steps can call `engine.flushNewline()` too.
+private func typeWithEnter(_ config: EngineConfig, _ steps: (Engine, (EngineResult) -> Void) -> Void) -> String {
+    let engine = Engine(config: config)
+    var acc: [Unicode.Scalar] = []
+    func apply(_ r: EngineResult) {
+        if r.backspaceCount > 0 { acc.removeLast(min(r.backspaceCount, acc.count)) }
+        acc.append(contentsOf: r.text.unicodeScalars)
+    }
+    steps(engine, apply)
+    return String(String.UnicodeScalarView(acc))
+}
+
+@Suite("AutoCapitalizeAfterNewline")
+struct AutoCapitalizeAfterNewlineTests {
+    @Test func newlineStartsNewSentence() {
+        let config = EngineConfig(autoCapitalize: true)
+        let result = typeWithEnter(config) { engine, apply in
+            for ch in "hoa " { apply(engine.process(KeyInput(ch))) }   // fresh start -> "Hoa "
+            for ch in "lan " { apply(engine.process(KeyInput(ch))) }   // mid-sentence -> "lan "
+            apply(engine.flushNewline())                                // Enter -> new sentence
+            for ch in "mai " { apply(engine.process(KeyInput(ch))) }   // sentence-initial -> "Mai "
+        }
+        #expect(result == "Hoa lan Mai ")
+    }
+
+    @Test func dashBulletAtLineStartCapitalizes() {
+        let config = EngineConfig(autoCapitalize: true)
+        let result = typeWithEnter(config) { engine, apply in
+            apply(engine.flushNewline())   // Enter on a fresh engine: sets atSentenceStart, commits nothing
+            for ch in "- muc " { apply(engine.process(KeyInput(ch))) }
+        }
+        #expect(result == "- Muc ")
+    }
+
+    @Test func newlineWithAutoCapitalizeOffLeavesLowercase() {
+        let config = EngineConfig(autoCapitalize: false)
+        let result = typeWithEnter(config) { engine, apply in
+            for ch in "hoa " { apply(engine.process(KeyInput(ch))) }
+            for ch in "lan " { apply(engine.process(KeyInput(ch))) }
+            apply(engine.flushNewline())
+            for ch in "mai " { apply(engine.process(KeyInput(ch))) }
+        }
+        #expect(result == "hoa lan mai ")
+    }
+}
+
 // MARK: - Quick end-consonant under the DEFAULT restoreIfInvalid (real usage)
 
 @Suite("QuickEndConsonantRealistic")

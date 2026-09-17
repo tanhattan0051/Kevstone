@@ -41,9 +41,12 @@ public enum KeyDecision: Equatable, Sendable {
     case character(Character)
     /// The kVK_Delete key: ask the engine to remove one raw keystroke.
     case backspace
-    /// A navigation/commit key (Return, Tab, arrows, ...): finalize the
+    /// A navigation/commit key (Tab, arrows, ...): finalize the
     /// current word but let the original event pass through untouched.
     case commitPassthrough
+    /// Return / KeypadEnter: finalize the current word, let the key pass
+    /// through, AND start a new sentence (for autoCapitalize).
+    case commitNewline
     /// A modifier-chorded key: drop the in-progress word and pass through.
     case resetPassthrough
     /// Anything else: pass through, engine untouched.

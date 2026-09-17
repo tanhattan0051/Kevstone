@@ -12,7 +12,8 @@ public enum KeyTranslator {
         if k.command || k.control || k.option { return .resetPassthrough }
         switch k.keyCode {
         case 51: return .backspace
-        case 36, 76, 48, 53, 117, 115, 119, 116, 121, 123, 124, 125, 126:
+        case 36, 76: return .commitNewline
+        case 48, 53, 117, 115, 119, 116, 121, 123, 124, 125, 126:
             return .commitPassthrough
         default: break
         }
