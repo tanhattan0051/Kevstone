@@ -49,7 +49,7 @@ enum Telex {
     static func fold(
         _ keys: [Character], quickTelex: Bool = false,
         quickStartConsonant: Bool = false, quickEndConsonant: Bool = false,
-        allowFreeToneMark: Bool = true
+        allowFreeToneMark: Bool = true, freeMarkAcrossCoda: Bool = false
     ) -> Composition {
         var cells: [Cell] = []
         var tone: Tone = .ngang
@@ -64,7 +64,8 @@ enum Telex {
                                quickTelex: quickTelex,
                                quickStartConsonant: quickStartConsonant,
                                quickEndConsonant: quickEndConsonant,
-                               allowFreeToneMark: allowFreeToneMark)
+                               allowFreeToneMark: allowFreeToneMark,
+                               freeMarkAcrossCoda: freeMarkAcrossCoda)
             prevChar = lo
             prevEffect = effect
         }
@@ -80,7 +81,8 @@ enum Telex {
         quickTelex: Bool,
         quickStartConsonant: Bool = false,
         quickEndConsonant: Bool = false,
-        allowFreeToneMark: Bool = true
+        allowFreeToneMark: Bool = true,
+        freeMarkAcrossCoda: Bool = false
     ) -> Effect {
 
         // 0. Start-consonant shortcut (Telex "gõ tắt phụ âm đầu"), onset only.
@@ -208,9 +210,15 @@ enum Telex {
                 // literal letter so those words aren't turned into đa/đi/đê. The
                 // closed-syllable branch is non-adjacent (the d isn't right
                 // before the 9/d trigger) and gated by allowFreeToneMark.
+                //
+                // `freeMarkAcrossCoda` (opt-in, default off) extends this to a
+                // still-OPEN syllable too — the onset `d` already exists (the
+                // `if let di =` above), so a non-adjacent trigger strokes it
+                // regardless of whether a coda has formed yet: dadng→đang.
+                // Accepted tradeoff: dad→đa (see DECISIONS.md).
                 let adjacent = di == cells.count - 1
                 let closedSyllable = !SyllableOps.currentCoda(cells).isEmpty
-                if adjacent || (allowFreeToneMark && closedSyllable) {
+                if adjacent || (allowFreeToneMark && closedSyllable) || freeMarkAcrossCoda {
                     cells[di].dStroke = true
                     return .dstroke(index: di)
                 }
@@ -258,6 +266,31 @@ enum Telex {
                         return .mark(key: lo, targets: [ei])
                     }
                     cells[ei].mark = .none   // reject → fall through to append
+                }
+            }
+
+            // `freeMarkAcrossCoda` (opt-in, default off) fallback: the search
+            // above only looks within the trailing (uninterrupted) vowel run
+            // and found nothing. Now search back across ALL cells — crossing
+            // a consonant coda on purpose — for the last vowel with the same
+            // base and no mark yet, genuinely across a coda (there is at
+            // least one consonant between it and the buffer end; otherwise
+            // it would already have been found above, so this never
+            // overlaps that within-nucleus path). This is what makes
+            // `trene`→trên possible, at the accepted cost of `mama`→mâm.
+            if ei == nil, canCirc, freeMarkAcrossCoda {
+                var acrossCoda: Int? = nil
+                for i in cells.indices.reversed() {
+                    guard cells[i].isVowel, cells[i].base == bv, cells[i].mark == .none else { continue }
+                    let hasConsonantAfter = cells[(i + 1)...].contains { !$0.isVowel }
+                    if hasConsonantAfter { acrossCoda = i; break }
+                }
+                if let ai = acrossCoda {
+                    cells[ai].mark = .circumflex
+                    if SyllableOps.marksLegal(cells) {
+                        return .mark(key: lo, targets: [ai])   // consume the key, no append
+                    }
+                    cells[ai].mark = .none   // reject → fall through to append
                 }
             }
 

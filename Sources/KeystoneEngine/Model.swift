@@ -135,6 +135,18 @@ public struct EngineConfig: Sendable, Equatable, Codable {
     /// non-adjacent application. Tones are syllable-level and unaffected
     /// either way. See DECISIONS.md "Positional (non-adjacent) marks".
     public var allowFreeToneMark: Bool
+    /// "Bỏ dấu ở cuối từ (kể cả sau phụ âm)" (Phase 4). Off by default — an
+    /// opt-in EXTENSION of `allowFreeToneMark`'s non-adjacent placement, not a
+    /// replacement for it. When true:
+    /// - Telex circumflex (a/e/o) may land on a vowel across a consonant
+    ///   coda, not only within the trailing vowel run: `trene`→trên.
+    /// - Telex/VNI đ may stroke a still-OPEN syllable's onset `d`, not only
+    ///   an adjacent `dd` or an already-closed syllable: `dadng`→đang.
+    /// Tradeoff accepted on purpose: the same mechanism turns some English
+    /// words Vietnamese (`mama`→mâm, `dad`→đa) when this is on. Default
+    /// false keeps the corpus and English-word protection exactly as today.
+    /// See DECISIONS.md "Bỏ dấu ở cuối từ / freeMarkAcrossCoda (Phase 4)".
+    public var freeMarkAcrossCoda: Bool
 
     public init(
         inputMethod: InputMethod = .telex,
@@ -149,7 +161,8 @@ public struct EngineConfig: Sendable, Equatable, Codable {
         quickStartConsonant: Bool = false,
         quickEndConsonant: Bool = false,
         autoCapitalize: Bool = false,
-        allowFreeToneMark: Bool = true
+        allowFreeToneMark: Bool = true,
+        freeMarkAcrossCoda: Bool = false
     ) {
         self.inputMethod = inputMethod
         self.codeTable = codeTable
@@ -164,6 +177,7 @@ public struct EngineConfig: Sendable, Equatable, Codable {
         self.quickEndConsonant = quickEndConsonant
         self.autoCapitalize = autoCapitalize
         self.allowFreeToneMark = allowFreeToneMark
+        self.freeMarkAcrossCoda = freeMarkAcrossCoda
     }
 }
 

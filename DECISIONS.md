@@ -68,6 +68,70 @@ Bounds added to protect common English words (from the full Telex sweep):
 - Note: `w` after a vowel and adjacent `oo`→ô are standard Telex (Vietnamese
   keys), so `cow`→cơ, `moon`→môn are correct, not bugs.
 
+## Bỏ dấu ở cuối từ / freeMarkAcrossCoda (Phase 4)
+
+`EngineConfig.freeMarkAcrossCoda` ("Bỏ dấu ở cuối từ (kể cả sau phụ âm)") is a
+NEW, separate opt-in flag — **default `false`** — that further EXTENDS the
+non-adjacent placement `allowFreeToneMark` already gates. It does not replace
+`allowFreeToneMark`; both flags are independent and a user can have either,
+both, or neither on. Being off by default means the ~251-case corpus and the
+English-word protection described under "Positional (non-adjacent) marks"
+above are completely untouched unless a user explicitly turns it on.
+
+**What it extends, when ON:**
+- **Telex circumflex across a coda** (`Telex.swift` case 7): the existing
+  non-adjacent search only looks within the trailing, uninterrupted vowel
+  run (it breaks at the first consonant walking backward from the end) — so
+  `trene` never finds the `e` in `tr` + `e` + `n` to circumflex, because a
+  consonant (`n`) sits between them. With the flag on, a fallback search
+  walks back across ALL cells (not stopping at a consonant) for the last
+  vowel with the same base letter and no mark yet, but only when that vowel
+  has at least one consonant between it and the end of the buffer (i.e.
+  genuinely across a coda — this never overlaps the existing within-nucleus
+  path, which already would have found it otherwise). `trene`→trên.
+- **Telex/VNI đ into an open syllable** (`Telex.swift` case 6, `VNI.swift`
+  case 9): both already stroke đ on an adjacent `dd`/`d9` or on a
+  non-adjacent trigger once the syllable has CLOSED (a coda exists) — gated
+  by `allowFreeToneMark`. With `freeMarkAcrossCoda` on, the non-adjacent
+  trigger fires even while the syllable is still OPEN (no coda yet):
+  `dadng`→đang (the second `d` strokes the onset immediately, before `ng` is
+  even typed).
+
+**Accepted English tradeoff, explicit and intentional.** Turning this on
+means the same mechanism that enables `trene`→trên and `dadng`→đang also
+turns some English words Vietnamese: `mama`→mâm (the across-coda circumflex
+fallback) and `dad`→đa (the open-syllable đ extension). This is the
+documented cost of the feature and is exactly why it ships OFF by default —
+a user opts into it knowingly, the same way `allowFreeToneMark` already
+documents its own, narrower version of this tradeoff.
+
+**VNI circumflex-at-end already worked without this flag.** VNI's case 6
+(circumflex) already searches across codas via `cells.lastIndex(where:)`
+rather than breaking at the first consonant, so `allowFreeToneMark` alone was
+already enough for VNI's circumflex-at-end (e.g. an end-of-word `a6` finds
+its target across a coda) — there is no English-word ambiguity to gate there
+because VNI's mark keys are digits, never letters, so a digit can never be
+mistaken for part of an English word the way a repeated `a`/`e`/`o` can in
+Telex. `freeMarkAcrossCoda` therefore did not need to change VNI's
+circumflex (case 6) at all; it only had to bring **Telex** circumflex to the
+same across-coda parity, and add the **đ-open-syllable** extension to both
+Telex and VNI (case 9), since đ's onset-only, letter-triggered nature in
+Telex has no VNI-digit equivalent that was already safe.
+
+**Note on VNI's đ-open-syllable case in practice.** Because VNI's đ trigger
+is a separate digit key (`9`), not the letter `d` itself, a sequence like
+`dad9` still has a plain, unstruck `d` sitting in the buffer as a literal
+consonant by the time `9` is pressed (VNI never gives `d` any special
+onset/đ duty the way Telex's `d` key does). That literal `d` ends up parsed
+as the syllable's coda, and `d` is not a legal Vietnamese coda
+(`Phonology.codas`), so the whole word fails validation and reverts to raw
+keystrokes at commit regardless of `freeMarkAcrossCoda` — verified by running
+(`Tests/KeystoneEngineTests/FreeMarkAcrossCodaTests.swift`,
+`vniDStrokeOnOpenSyllable`). The flag still correctly extends case 9's fire
+condition for parity with Telex; it just cannot rescue this particular
+key sequence, because VNI's đ trigger has no way to "consume" an intervening
+literal letter the way Telex's letter-triggered đ does.
+
 ## Open ươ → uơ downgrade (spec Open Question #7)
 
 An OPEN `ươ` (both horns, the u+o pair is the whole nucleus, nothing after the

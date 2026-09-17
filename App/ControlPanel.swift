@@ -89,6 +89,10 @@ private struct BasicPane: View {
                 Toggle("Viết Hoa chữ cái đầu câu", isOn: $model.autoCapitalize)
                 Toggle("Sửa lỗi gợi ý (trình duyệt, Excel,...)", isOn: $model.autoFixSuggestion)
                 Toggle("Cho phép bỏ dấu tự do", isOn: $model.allowFreeToneMark)
+                Toggle("Bỏ dấu ở cuối từ (kể cả sau phụ âm)", isOn: $model.freeMarkAcrossCoda)
+                Text("Cho gõ dấu ở cuối từ như trene→trên, dadng→đang. Đánh đổi: vài từ tiếng Anh (mama, dad…) có thể thành tiếng Việt.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section("Chuyển đổi") {

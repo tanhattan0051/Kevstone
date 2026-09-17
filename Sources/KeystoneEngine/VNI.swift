@@ -20,7 +20,8 @@ enum VNI {
     }
     private static let tones: [Character: Tone] = ["1": .sac, "2": .huyen, "3": .hoi, "4": .nga, "5": .nang]
 
-    static func fold(_ keys: [Character], allowFreeToneMark: Bool = true) -> Composition {
+    static func fold(_ keys: [Character], allowFreeToneMark: Bool = true,
+                      freeMarkAcrossCoda: Bool = false) -> Composition {
         var cells: [Cell] = []
         var tone: Tone = .ngang
         var prevChar: Character = " "
@@ -29,7 +30,7 @@ enum VNI {
             let up = ch.isUppercase
             let lo = Character(ch.lowercased())
             let e = apply(lo, upper: up, prevChar: prevChar, prevEffect: prevEffect, cells: &cells, tone: &tone,
-                          allowFreeToneMark: allowFreeToneMark)
+                          allowFreeToneMark: allowFreeToneMark, freeMarkAcrossCoda: freeMarkAcrossCoda)
             prevChar = lo; prevEffect = e
         }
         return Composition(cells: cells, tone: tone)
@@ -37,7 +38,7 @@ enum VNI {
 
     private static func apply(_ lo: Character, upper up: Bool, prevChar: Character, prevEffect: Effect,
                               cells: inout [Cell], tone: inout Tone,
-                              allowFreeToneMark: Bool = true) -> Effect {
+                              allowFreeToneMark: Bool = true, freeMarkAcrossCoda: Bool = false) -> Effect {
         // Tone digits 1..5
         if let newTone = tones[lo] {
             guard SyllableOps.hasVowel(cells) else { cells.append(.cons(lo, upper: up)); return .base }
@@ -140,10 +141,12 @@ enum VNI {
             if let di = SyllableOps.onsetDIndex(cells) {  // d9 / dang9 → đ on the onset d
                 // Adjacent (d then 9) or a closed syllable only — mirrors Telex
                 // đ. The closed-syllable branch is non-adjacent and gated by
-                // allowFreeToneMark.
+                // allowFreeToneMark. `freeMarkAcrossCoda` extends this to a
+                // still-OPEN syllable too, for parity with Telex's open-syllable
+                // đ extension (see Telex.swift case 6).
                 let adjacent = di == cells.count - 1
                 let closedSyllable = !SyllableOps.currentCoda(cells).isEmpty
-                if adjacent || (allowFreeToneMark && closedSyllable) {
+                if adjacent || (allowFreeToneMark && closedSyllable) || freeMarkAcrossCoda {
                     cells[di].dStroke = true; return .dstroke(index: di)
                 }
             }

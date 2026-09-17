@@ -8,8 +8,8 @@
 //  - The "mapped" group (inputMethod, codeTable, orthography, quickTelex,
 //    restoreIfInvalid, macrosEnabled, macrosExpandWhenVietnameseOff,
 //    macroAutoCapitalize, quickStartConsonant, quickEndConsonant,
-//    autoCapitalize, allowFreeToneMark) is pushed into `EngineConfig` on
-//    every change and reaches the running tap via
+//    autoCapitalize, allowFreeToneMark, freeMarkAcrossCoda) is pushed into
+//    `EngineConfig` on every change and reaches the running tap via
 //    `EngineController.updateConfig`.
 //  - Everything else is scaffolding: real UI, real persistence, but no
 //    engine behavior yet (`EngineConfig` doesn't have a field for it). Each
@@ -135,6 +135,19 @@ final class AppModel {
     var allowFreeToneMark: Bool = AppModel.loadBool(Keys.allowFreeToneMark, default: true) {
         didSet {
             UserDefaults.standard.set(allowFreeToneMark, forKey: Keys.allowFreeToneMark)
+            pushConfig()
+        }
+    }
+
+    /// "Bỏ dấu ở cuối từ (kể cả sau phụ âm)" (Phase 4) — an opt-in extension
+    /// of `allowFreeToneMark` that also lets Telex circumflex land across a
+    /// consonant coda and lets Telex/VNI đ stroke a still-open syllable's
+    /// onset d (see DECISIONS.md "Bỏ dấu ở cuối từ / freeMarkAcrossCoda
+    /// (Phase 4)"). Off by default — ships dormant, accepted English-word
+    /// tradeoff only applies once a user turns it on.
+    var freeMarkAcrossCoda: Bool = AppModel.loadBool(Keys.freeMarkAcrossCoda, default: false) {
+        didSet {
+            UserDefaults.standard.set(freeMarkAcrossCoda, forKey: Keys.freeMarkAcrossCoda)
             pushConfig()
         }
     }
@@ -507,6 +520,7 @@ final class AppModel {
 
         spellCheck = true
         allowFreeToneMark = true
+        freeMarkAcrossCoda = false
         autoCapitalize = true
         quickStartConsonant = false
         quickEndConsonant = false
@@ -639,7 +653,8 @@ final class AppModel {
             quickStartConsonant: quickStartConsonant,
             quickEndConsonant: quickEndConsonant,
             autoCapitalize: autoCapitalize,
-            allowFreeToneMark: allowFreeToneMark
+            allowFreeToneMark: allowFreeToneMark,
+            freeMarkAcrossCoda: freeMarkAcrossCoda
         ))
     }
 
@@ -680,6 +695,7 @@ final class AppModel {
         static let restoreIfInvalid = "settings.restoreIfInvalid"
         static let spellCheck = "settings.spellCheck"
         static let allowFreeToneMark = "settings.allowFreeToneMark"
+        static let freeMarkAcrossCoda = "settings.freeMarkAcrossCoda"
         static let autoCapitalize = "settings.autoCapitalize"
         static let quickStartConsonant = "settings.quickStartConsonant"
         static let quickEndConsonant = "settings.quickEndConsonant"
