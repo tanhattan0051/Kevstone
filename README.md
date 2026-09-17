@@ -29,5 +29,10 @@ swift run Keystone          # chạy app menu-bar (cấp quyền Accessibility k
 
 > ⚠️ Gõ tiếng Việt ở mọi app **chỉ chạy trên macOS thật có quyền Accessibility** — `swift run Keystone`, cấp quyền, rồi thử. Xem mục **[VERIFY]** trong `HANDOFF.md`.
 
+## Tác giả
+- **Tạ Nhật Tân**
+- Mọi góp ý, gửi cho mình qua **tanhattan0051@gmail.com**
+
 ## Bản quyền
-Engine viết mới từ đầu (clean-room), **không** dùng mã của OpenKey (GPLv3). Bản quyền thuộc tác giả; giấy phép tuỳ chọn.
+Engine viết mới từ đầu (clean-room), **không** dùng mã của OpenKey (GPLv3) — bản quyền thuộc **Tạ Nhật Tân**.
+Phát hành theo giấy phép **MIT** (xem [`LICENSE`](LICENSE)).
