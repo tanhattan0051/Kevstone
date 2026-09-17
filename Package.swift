@@ -24,7 +24,8 @@ let package = Package(
             name: "Keystone",
             dependencies: ["KeystoneEngine", "KeystoneInput"],
             path: "App",
-            exclude: ["Info.plist"]   // used only when packaged as a .app (Phase 5), not by `swift run`
+            // used only when packaged as a .app (Phase 5), not by `swift run`
+            exclude: ["Info.plist", "Keystone.entitlements"]
         ),
 
         .testTarget(

@@ -1,7 +1,16 @@
-// AppModel.swift — owns the engine controller and the live event tap, and
-// exposes the small amount of state the menu-bar UI needs (on/off, input
-// method, permission + tap status). Everything here runs on the main actor;
-// the tap itself runs its own dedicated thread inside KeystoneInput.
+// AppModel.swift — owns the engine controller and the live event tap, and is
+// also the app's settings store: every user-facing preference from the
+// Control Panel / menu bar lives here as a persisted `@Observable` property.
+// Everything here runs on the main actor; the tap itself runs its own
+// dedicated thread inside KeystoneInput.
+//
+// Two tiers of properties:
+//  - The "mapped" group (inputMethod, codeTable, orthography, quickTelex,
+//    restoreIfInvalid) is pushed into `EngineConfig` on every change and
+//    reaches the running tap via `EngineController.updateConfig`.
+//  - Everything else is scaffolding: real UI, real persistence, but no
+//    engine behavior yet (`EngineConfig` doesn't have a field for it). Each
+//    one is marked `// TODO: wire to engine`.
 
 import SwiftUI
 import AppKit
@@ -9,13 +18,184 @@ import Observation
 import KeystoneEngine
 import KeystoneInput
 
+/// OpenKey's "Phím chuyển" (switch-language hot key) is a modifier-only
+/// combo, not a single key. This is UI scaffolding only — no global hot key
+/// is registered yet.
+enum SwitchKeyModifier: String, CaseIterable, Identifiable, Codable {
+    case controlShift, optionShift, commandShift, controlOption
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .controlShift: return "⌃ ⇧"
+        case .optionShift:  return "⌥ ⇧"
+        case .commandShift: return "⌘ ⇧"
+        case .controlOption: return "⌃ ⌥"
+        }
+    }
+}
+
 @MainActor
 @Observable
 final class AppModel {
     static let shared = AppModel()
 
+    // MARK: - Enable / input method (existing, tap-wired)
+
     var enabled = true { didSet { controller.setActive(enabled) } }
-    var inputMethod: InputMethod = .telex { didSet { pushConfig() } }
+    var inputMethod: InputMethod = AppModel.loadRaw(Keys.inputMethod, default: .telex) {
+        didSet {
+            UserDefaults.standard.set(inputMethod.rawValue, forKey: Keys.inputMethod)
+            pushConfig()
+        }
+    }
+
+    // MARK: - Mapped group — pushed into EngineConfig
+
+    var codeTable: CodeTable = AppModel.loadRaw(Keys.codeTable, default: .unicode) {
+        didSet {
+            UserDefaults.standard.set(codeTable.rawValue, forKey: Keys.codeTable)
+            pushConfig()
+        }
+    }
+
+    var orthography: Orthography = AppModel.loadRaw(Keys.orthography, default: .modern) {
+        didSet {
+            UserDefaults.standard.set(orthography.rawValue, forKey: Keys.orthography)
+            pushConfig()
+        }
+    }
+
+    /// UI-facing toggle for "Đặt dấu oà, uý (thay vì òa, úy)" — ON means
+    /// classic tone placement. `orthography` stays the single source of
+    /// truth; this just gives Control Panel a plain Bool to bind to.
+    var useClassicToneMarks: Bool {
+        get { orthography == .classic }
+        set { orthography = newValue ? .classic : .modern }
+    }
+
+    /// "Gõ nhanh (cc=ch, gg=gi, kk=kh, nn=ng, qq=qu, pp=ph, tt=th)"
+    var quickTelex: Bool = AppModel.loadBool(Keys.quickTelex, default: false) {
+        didSet {
+            UserDefaults.standard.set(quickTelex, forKey: Keys.quickTelex)
+            pushConfig()
+        }
+    }
+
+    /// "Tự khôi phục phím với từ sai"
+    var restoreIfInvalid: Bool = AppModel.loadBool(Keys.restoreIfInvalid, default: true) {
+        didSet {
+            UserDefaults.standard.set(restoreIfInvalid, forKey: Keys.restoreIfInvalid)
+            pushConfig()
+        }
+    }
+
+    // MARK: - Scaffolding — persisted, displayed, not yet in EngineConfig
+
+    /// "Kiểm tra chính tả"
+    // TODO: wire to engine — EngineConfig has no spellCheck field yet.
+    var spellCheck: Bool = AppModel.loadBool(Keys.spellCheck, default: true) {
+        didSet { UserDefaults.standard.set(spellCheck, forKey: Keys.spellCheck) }
+    }
+
+    /// "Cho phép bỏ dấu tự do"
+    // TODO: wire to engine (design spec Part A §4 — free tone-mark placement).
+    var allowFreeToneMark: Bool = AppModel.loadBool(Keys.allowFreeToneMark, default: false) {
+        didSet { UserDefaults.standard.set(allowFreeToneMark, forKey: Keys.allowFreeToneMark) }
+    }
+
+    /// "Viết Hoa chữ cái đầu câu"
+    // TODO: wire to engine — sentence-initial auto-capitalize isn't implemented yet.
+    var autoCapitalize: Bool = AppModel.loadBool(Keys.autoCapitalize, default: true) {
+        didSet { UserDefaults.standard.set(autoCapitalize, forKey: Keys.autoCapitalize) }
+    }
+
+    /// "Gõ tắt phụ âm đầu: f→ph, j→gi, w→qu"
+    // TODO: wire to engine (Phase 3 Telex extensions).
+    var quickStartConsonant: Bool = AppModel.loadBool(Keys.quickStartConsonant, default: false) {
+        didSet { UserDefaults.standard.set(quickStartConsonant, forKey: Keys.quickStartConsonant) }
+    }
+
+    /// "Gõ tắt phụ âm cuối: g→ng, h→nh, k→ch"
+    // TODO: wire to engine (Phase 3 Telex extensions).
+    var quickEndConsonant: Bool = AppModel.loadBool(Keys.quickEndConsonant, default: false) {
+        didSet { UserDefaults.standard.set(quickEndConsonant, forKey: Keys.quickEndConsonant) }
+    }
+
+    /// "Chuyển chế độ thông minh" (smart switch on app change)
+    // TODO: wire to engine/input layer (design spec Part B/C, E.7).
+    var smartSwitch: Bool = AppModel.loadBool(Keys.smartSwitch, default: true) {
+        didSet { UserDefaults.standard.set(smartSwitch, forKey: Keys.smartSwitch) }
+    }
+
+    /// "Tự ghi nhớ bảng mã theo ứng dụng"
+    // TODO: wire to engine/input layer (per-bundle-id remembered code table).
+    var rememberCodePerApp: Bool = AppModel.loadBool(Keys.rememberCodePerApp, default: true) {
+        didSet { UserDefaults.standard.set(rememberCodePerApp, forKey: Keys.rememberCodePerApp) }
+    }
+
+    /// "Sửa lỗi gợi ý (trình duyệt, Excel,...)"
+    // TODO: wire to engine (design spec E.2/E.3 — autocomplete-safe editing).
+    var autoFixSuggestion: Bool = AppModel.loadBool(Keys.autoFixSuggestion, default: true) {
+        didSet { UserDefaults.standard.set(autoFixSuggestion, forKey: Keys.autoFixSuggestion) }
+    }
+
+    /// "Gửi từng phím (bật nếu bị lỗi)"
+    // TODO: wire to input layer (per-grapheme send fallback, design spec E.3).
+    var sendEachKeystroke: Bool = AppModel.loadBool(Keys.sendEachKeystroke, default: false) {
+        didSet { UserDefaults.standard.set(sendEachKeystroke, forKey: Keys.sendEachKeystroke) }
+    }
+
+    /// "Phím chuyển:"
+    // TODO: wire to input layer — no global hot key is registered yet.
+    var switchKeyModifier: SwitchKeyModifier = AppModel.loadRaw(Keys.switchKeyModifier, default: .controlShift) {
+        didSet { UserDefaults.standard.set(switchKeyModifier.rawValue, forKey: Keys.switchKeyModifier) }
+    }
+
+    /// "Cho phép gõ tắt" (Gõ tắt tab)
+    // TODO: wire to engine — macro expansion isn't implemented yet (Phase 4).
+    var macrosEnabled: Bool = AppModel.loadBool(Keys.macrosEnabled, default: true) {
+        didSet { UserDefaults.standard.set(macrosEnabled, forKey: Keys.macrosEnabled) }
+    }
+
+    /// "Gõ tắt cả khi tắt tiếng Việt"
+    // TODO: wire to engine (Phase 4).
+    var macrosExpandWhenVietnameseOff: Bool = AppModel.loadBool(Keys.macrosExpandWhenVietnameseOff, default: false) {
+        didSet { UserDefaults.standard.set(macrosExpandWhenVietnameseOff, forKey: Keys.macrosExpandWhenVietnameseOff) }
+    }
+
+    /// "Tự động viết hoa" (macro-triggered capitalization, Gõ tắt tab)
+    // TODO: wire to engine (Phase 4).
+    var macroAutoCapitalize: Bool = AppModel.loadBool(Keys.macroAutoCapitalize, default: true) {
+        didSet { UserDefaults.standard.set(macroAutoCapitalize, forKey: Keys.macroAutoCapitalize) }
+    }
+
+    /// "Khởi động cùng macOS"
+    // TODO: wire to SMAppService.mainApp (design spec Part C §8).
+    var runAtLogin: Bool = AppModel.loadBool(Keys.runAtLogin, default: false) {
+        didSet { UserDefaults.standard.set(runAtLogin, forKey: Keys.runAtLogin) }
+    }
+
+    /// "Bật bảng này khi khởi động" — open the Control Panel at launch.
+    // TODO: wire to launch logic (KeystoneApp bootstrap).
+    var openControlPanelAtLaunch: Bool = AppModel.loadBool(Keys.openControlPanelAtLaunch, default: false) {
+        didSet { UserDefaults.standard.set(openControlPanelAtLaunch, forKey: Keys.openControlPanelAtLaunch) }
+    }
+
+    /// "Kiểm tra bản mới khi khởi động"
+    // TODO: wire to an update checker (design spec Open Q #9 — Sparkle vs bespoke).
+    var checkForUpdates: Bool = AppModel.loadBool(Keys.checkForUpdates, default: true) {
+        didSet { UserDefaults.standard.set(checkForUpdates, forKey: Keys.checkForUpdates) }
+    }
+
+    /// "Hiện icon trên Dock"
+    // TODO: wire to NSApp.setActivationPolicy (design spec Part C §1.1).
+    var showDockIcon: Bool = AppModel.loadBool(Keys.showDockIcon, default: false) {
+        didSet { UserDefaults.standard.set(showDockIcon, forKey: Keys.showDockIcon) }
+    }
+
+    // MARK: - Permission / tap status (existing)
 
     private(set) var accessibilityTrusted = Permissions.isAccessibilityTrusted()
     private(set) var inputMonitoring = Permissions.inputMonitoringGranted()
@@ -34,6 +214,7 @@ final class AppModel {
     private init() {
         controller = EngineController(config: EngineConfig())
         tap = EventTapController(engine: controller)
+        pushConfig()   // push whatever was loaded from UserDefaults above
     }
 
     func bootstrap() {
@@ -77,6 +258,33 @@ final class AppModel {
 
     func quit() { shutdown(); NSApp.terminate(nil) }
 
+    /// "Mặc định" — reset every setting (mapped + scaffolding) to its default.
+    func resetToDefaults() {
+        inputMethod = .telex
+        codeTable = .unicode
+        orthography = .modern
+        quickTelex = false
+        restoreIfInvalid = true
+
+        spellCheck = true
+        allowFreeToneMark = false
+        autoCapitalize = true
+        quickStartConsonant = false
+        quickEndConsonant = false
+        smartSwitch = true
+        rememberCodePerApp = true
+        autoFixSuggestion = true
+        sendEachKeystroke = false
+        switchKeyModifier = .controlShift
+        macrosEnabled = true
+        macrosExpandWhenVietnameseOff = false
+        macroAutoCapitalize = true
+        runAtLogin = false
+        openControlPanelAtLaunch = false
+        checkForUpdates = true
+        showDockIcon = false
+    }
+
     private func startTap() {
         guard !tapStarted else { return }
         tap.start()
@@ -86,7 +294,13 @@ final class AppModel {
     }
 
     private func pushConfig() {
-        controller.updateConfig(EngineConfig(inputMethod: inputMethod))
+        controller.updateConfig(EngineConfig(
+            inputMethod: inputMethod,
+            codeTable: codeTable,
+            orthography: orthography,
+            restoreIfInvalid: restoreIfInvalid,
+            quickTelex: quickTelex
+        ))
     }
 
     private func refresh() {
@@ -107,5 +321,41 @@ final class AppModel {
             startAttempts = 0
             needsRelaunch = false
         }
+    }
+
+    // MARK: - UserDefaults persistence
+
+    private enum Keys {
+        static let inputMethod = "settings.inputMethod"
+        static let codeTable = "settings.codeTable"
+        static let orthography = "settings.orthography"
+        static let quickTelex = "settings.quickTelex"
+        static let restoreIfInvalid = "settings.restoreIfInvalid"
+        static let spellCheck = "settings.spellCheck"
+        static let allowFreeToneMark = "settings.allowFreeToneMark"
+        static let autoCapitalize = "settings.autoCapitalize"
+        static let quickStartConsonant = "settings.quickStartConsonant"
+        static let quickEndConsonant = "settings.quickEndConsonant"
+        static let smartSwitch = "settings.smartSwitch"
+        static let rememberCodePerApp = "settings.rememberCodePerApp"
+        static let autoFixSuggestion = "settings.autoFixSuggestion"
+        static let sendEachKeystroke = "settings.sendEachKeystroke"
+        static let switchKeyModifier = "settings.switchKeyModifier"
+        static let macrosEnabled = "settings.macrosEnabled"
+        static let macrosExpandWhenVietnameseOff = "settings.macrosExpandWhenVietnameseOff"
+        static let macroAutoCapitalize = "settings.macroAutoCapitalize"
+        static let runAtLogin = "settings.runAtLogin"
+        static let openControlPanelAtLaunch = "settings.openControlPanelAtLaunch"
+        static let checkForUpdates = "settings.checkForUpdates"
+        static let showDockIcon = "settings.showDockIcon"
+    }
+
+    private static func loadBool(_ key: String, default def: Bool) -> Bool {
+        UserDefaults.standard.object(forKey: key) as? Bool ?? def
+    }
+
+    private static func loadRaw<T: RawRepresentable>(_ key: String, default def: T) -> T where T.RawValue == String {
+        guard let raw = UserDefaults.standard.string(forKey: key) else { return def }
+        return T(rawValue: raw) ?? def
     }
 }
