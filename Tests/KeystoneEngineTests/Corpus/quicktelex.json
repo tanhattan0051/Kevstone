@@ -1,0 +1,16 @@
+[
+  { "name": "cc->ch onset", "keys": "cca", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "quickTelex": true, "expected": "cha" },
+  { "name": "gg->gi onset", "keys": "gga", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "quickTelex": true, "expected": "gia" },
+  { "name": "kk->kh onset", "keys": "kko", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "quickTelex": true, "expected": "kho" },
+  { "name": "nn->ng onset", "keys": "nna", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "quickTelex": true, "expected": "nga" },
+  { "name": "pp->ph onset", "keys": "ppo", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "quickTelex": true, "expected": "pho" },
+  { "name": "tt->th onset", "keys": "tto", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "quickTelex": true, "expected": "tho" },
+  { "name": "qq->qu onset", "keys": "qqa", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "quickTelex": true, "expected": "qua" },
+  { "name": "nn->ng coda", "keys": "bann", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "quickTelex": true, "expected": "bang" },
+  { "name": "cc->ch coda + sac", "keys": "saccs", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "quickTelex": true, "expected": "sách" },
+  { "name": "cc->ch + huyen", "keys": "ccaf", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "quickTelex": true, "expected": "chà" },
+  { "name": "tt->th + circumflex", "keys": "ttoo", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "quickTelex": true, "expected": "thô" },
+  { "name": "dd stays đ under quick telex", "keys": "ddi", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "quickTelex": true, "expected": "đi" },
+  { "name": "quick off: cc reverts", "keys": "cca", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "quickTelex": false, "expected": "cca" },
+  { "name": "quick off: nn reverts", "keys": "nna", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "quickTelex": false, "expected": "nna" }
+]

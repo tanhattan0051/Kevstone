@@ -41,7 +41,7 @@ public final class Engine {
     private func interpret(_ keys: [Character]) -> Composition {
         switch config.inputMethod {
         case .vni: return VNI.fold(keys)
-        default:   return Telex.fold(keys)
+        default:   return Telex.fold(keys, quickTelex: config.quickTelex)
         }
     }
 

@@ -62,6 +62,21 @@ so `quow` → `quơ`, `quowr` → `quở`.
 onset before `i` (`gì`, `gìn`, `gỉ`), distinct from `ghì`. The validator allows
 `g` before every vowel except `e`/`ê`.
 
+## Input methods (Phase 3)
+
+- **Telex** and **VNI** are fully implemented and share one syllable core
+  (`SyllableOps`), so both render byte-identical Vietnamese (pinned by the
+  Telex↔VNI differential suite).
+- **Quick Telex** (gõ nhanh) is a config toggle (`EngineConfig.quickTelex`, off
+  by default) layered on Telex: `cc→ch, gg→gi, kk→kh, nn→ng, pp→ph, qq→qu,
+  tt→th` at onset/coda; `dd→đ` is unchanged.
+- **Simple Telex 1 / 2**: the spec's reduced-collision definitions (§2.5) are
+  explicitly clean-room and unverified against OpenKey (Open Q #1). Until we can
+  black-box test real OpenKey behavior, `.simpleTelex1`/`.simpleTelex2` dispatch
+  to the full Telex interpreter (a safe superset — the `[`/`]` direct keys are
+  already enabled). Revisit with parity testing before claiming distinct
+  semantics.
+
 ## Nucleus × coda rime (spec §5.3)
 
 A nucleus that ends in a semivowel offglide (falling diphthongs/triphthongs:

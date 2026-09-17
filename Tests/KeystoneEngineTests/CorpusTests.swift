@@ -38,4 +38,7 @@ import Testing
 
     @Test(arguments: CorpusLoader.load("vni"))
     func vni(_ c: CorpusCase) { #expect(Replayer.run(c) == c.expected, "keys=\(c.keys)") }
+
+    @Test(arguments: CorpusLoader.load("quicktelex"))
+    func quickTelex(_ c: CorpusCase) { #expect(Replayer.run(c) == c.expected, "keys=\(c.keys)") }
 }

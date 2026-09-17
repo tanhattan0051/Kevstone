@@ -20,6 +20,7 @@ struct CorpusCase: Codable, CustomTestStringConvertible {
     var codeTable: String?
     var orthography: String?
     var restoreIfInvalid: Bool?
+    var quickTelex: Bool?
     var expected: String
 
     var engineConfig: EngineConfig {
@@ -27,7 +28,8 @@ struct CorpusCase: Codable, CustomTestStringConvertible {
             inputMethod: InputMethod(rawValue: method ?? "telex") ?? .telex,
             codeTable: CodeTable(rawValue: codeTable ?? "unicode") ?? .unicode,
             orthography: Orthography(rawValue: orthography ?? "modern") ?? .modern,
-            restoreIfInvalid: restoreIfInvalid ?? true
+            restoreIfInvalid: restoreIfInvalid ?? true,
+            quickTelex: quickTelex ?? false
         )
     }
 

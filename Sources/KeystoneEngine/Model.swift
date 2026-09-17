@@ -93,17 +93,24 @@ public struct EngineConfig: Sendable, Equatable, Codable {
     public var orthography: Orthography
     /// When true, an invalid syllable is reverted to raw keystrokes at commit.
     public var restoreIfInvalid: Bool
+    /// "Quick Telex" (gõ nhanh): typing a consonant twice in a row expands it
+    /// to the matching digraph/trigraph onset (cc→ch, gg→gi, kk→kh, nn→ng,
+    /// pp→ph, qq→qu, tt→th). Off by default (design spec Part A §2.6). Note
+    /// dd→đ is a separate, always-on rule and is not gated by this flag.
+    public var quickTelex: Bool
 
     public init(
         inputMethod: InputMethod = .telex,
         codeTable: CodeTable = .unicode,
         orthography: Orthography = .modern,
-        restoreIfInvalid: Bool = true
+        restoreIfInvalid: Bool = true,
+        quickTelex: Bool = false
     ) {
         self.inputMethod = inputMethod
         self.codeTable = codeTable
         self.orthography = orthography
         self.restoreIfInvalid = restoreIfInvalid
+        self.quickTelex = quickTelex
     }
 }
 

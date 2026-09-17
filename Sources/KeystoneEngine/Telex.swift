@@ -46,7 +46,7 @@ enum Telex {
     ]
 
     /// Fold the raw key list into a `Composition`.
-    static func fold(_ keys: [Character]) -> Composition {
+    static func fold(_ keys: [Character], quickTelex: Bool = false) -> Composition {
         var cells: [Cell] = []
         var tone: Tone = .ngang
         var prevChar: Character = " "
@@ -56,7 +56,8 @@ enum Telex {
             let up = ch.isUppercase
             let lo = Character(ch.lowercased())
             let effect = apply(lo, upper: up, prevChar: prevChar,
-                               prevEffect: prevEffect, cells: &cells, tone: &tone)
+                               prevEffect: prevEffect, cells: &cells, tone: &tone,
+                               quickTelex: quickTelex)
             prevChar = lo
             prevEffect = effect
         }
@@ -68,7 +69,8 @@ enum Telex {
     private static func apply(
         _ lo: Character, upper up: Bool,
         prevChar: Character, prevEffect: Effect,
-        cells: inout [Cell], tone: inout Tone
+        cells: inout [Cell], tone: inout Tone,
+        quickTelex: Bool
     ) -> Effect {
 
         // 1. Tone keys s/f/r/x/j
@@ -189,6 +191,17 @@ enum Telex {
         }
 
         // 8. Any other consonant
+        if quickTelex, prevChar == lo,
+           let last = cells.indices.last, !cells[last].isVowel,
+           cells[last].consonant == lo, !cells[last].dStroke {
+            switch lo {
+            case "c", "k", "p", "t": cells.append(.cons("h", upper: up)); return .base
+            case "n":                cells.append(.cons("g", upper: up)); return .base
+            case "g":                cells.append(.vowel(.i, .none, upper: up)); return .base
+            case "q":                cells.append(.vowel(.u, .none, upper: up)); return .base
+            default: break
+            }
+        }
         cells.append(.cons(lo, upper: up))
         return .base
     }
