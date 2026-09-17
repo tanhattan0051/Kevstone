@@ -9,14 +9,24 @@
 // `Phonology` and reverted to raw keystrokes if invalid and
 // `config.restoreIfInvalid` is set.
 //
+// Rendering and diffing happen on the active output table's CODE UNITS
+// (design spec Part A §6-§7), not on Unicode scalars or `Character`s: a
+// legacy/compound table can spell one logical Vietnamese letter as 2-3 code
+// units, and `backspaceCount` must count exactly what the input layer will
+// delete. For `.unicode` (the live-typing default) a code unit IS a UTF-16
+// unit of the NFC string, which for Vietnamese (all-BMP) is byte-for-byte
+// identical to the previous scalar-based diff — so this refactor is
+// observationally a no-op for the default table (pinned by the full corpus
+// suite) while making the legacy tables correct.
+//
 // Phase 1 supports Telex only; `config.inputMethod` is not yet consulted.
 
 public final class Engine {
     public var config: EngineConfig
     public init(config: EngineConfig) { self.config = config }
 
-    private var rawKeys: [Character] = []          // the composing word's raw keys
-    private var prevUnits: [Unicode.Scalar] = []    // scalars currently "on screen" for the composing word
+    private var rawKeys: [Character] = []   // the composing word's raw keys
+    private var prevUnits: [UInt16] = []    // active table's code units currently "on screen"
 
     public func process(_ key: KeyInput) -> EngineResult {
         switch key.kind {
@@ -48,8 +58,9 @@ public final class Engine {
     // append a word char or handle backspace: re-fold whole word, diff against on-screen
     private func rerender() -> EngineResult {
         let comp = interpret(rawKeys)
-        let newUnits = Array(render(comp).unicodeScalars)
-        let r = diff(prevUnits, newUnits)
+        let table = outputTable(for: config.codeTable)
+        let newUnits = encode(comp, table: table)
+        let r = diff(prevUnits, newUnits, table: table)
         prevUnits = newUnits
         return r
     }
@@ -57,16 +68,16 @@ public final class Engine {
     // commit: apply restore-if-invalid, produce the edit that turns on-screen -> final (+ optional boundary char)
     private func finalize(boundary: Character?) -> EngineResult {
         let comp = interpret(rawKeys)
-        let finalString: String
+        let table = outputTable(for: config.codeTable)
+        let finalUnits: [UInt16]
         if config.restoreIfInvalid && !rawKeys.isEmpty && !isValid(comp) {
-            finalString = String(rawKeys)           // revert to raw keystrokes
+            finalUnits = rawKeys.flatMap { table.plain($0) }   // revert to raw keystrokes
         } else {
-            finalString = render(comp)
+            finalUnits = encode(comp, table: table)
         }
-        let finalUnits = Array(finalString.unicodeScalars)
         let common = commonPrefixCount(prevUnits, finalUnits)
         let bs = prevUnits.count - common
-        var text = String(String.UnicodeScalarView(finalUnits[common...]))
+        var text = table.decode(Array(finalUnits[common...]))
         if let b = boundary { text.append(b) }
         rawKeys = []; prevUnits = []
         return EngineResult(backspaceCount: bs, text: text)
@@ -83,16 +94,16 @@ public final class Engine {
         }
     }
 
-    private func commonPrefixCount(_ a: [Unicode.Scalar], _ b: [Unicode.Scalar]) -> Int {
+    private func commonPrefixCount<T: Equatable>(_ a: [T], _ b: [T]) -> Int {
         var i = 0; let m = min(a.count, b.count)
         while i < m && a[i] == b[i] { i += 1 }
         return i
     }
 
-    private func diff(_ prev: [Unicode.Scalar], _ new: [Unicode.Scalar]) -> EngineResult {
+    private func diff(_ prev: [UInt16], _ new: [UInt16], table: OutputTable) -> EngineResult {
         let i = commonPrefixCount(prev, new)
         let bs = prev.count - i
-        let text = String(String.UnicodeScalarView(new[i...]))
+        let text = table.decode(Array(new[i...]))
         return EngineResult(backspaceCount: bs, text: text)
     }
 
@@ -151,27 +162,32 @@ public final class Engine {
                       hasConsonantCoda: !codaCells.isEmpty, trailingVowelAfterCoda: trailing)
     }
 
-    private func render(_ comp: Composition) -> String {
+    // Render a composed word to the active output table's code units
+    // (design spec Part A §6). Same tone-placement/cell-walk logic as the
+    // old String-returning `render`; only the per-cell emission changed, to
+    // go through `OutputTable` instead of hard-coding `NFC`.
+    private func encode(_ comp: Composition, table: OutputTable) -> [UInt16] {
         let cells = comp.cells
-        if cells.isEmpty { return "" }
+        if cells.isEmpty { return [] }
         let p = parse(cells)
         var toneIndexInNucleus: Int? = nil
         if !p.nucleusIdx.isEmpty {
             let nvs = p.nucleusIdx.map { TonePlacement.NVowel(base: cells[$0].base, mark: cells[$0].mark) }
             toneIndexInNucleus = TonePlacement.index(nucleus: nvs, hasCoda: p.hasConsonantCoda, style: config.orthography)
         }
-        var out = ""
+        var out: [UInt16] = []
         for (k, cell) in cells.enumerated() {
             if cell.isVowel {
                 var t: Tone = .ngang
                 if comp.tone != .ngang, let pos = p.nucleusIdx.firstIndex(of: k), pos == toneIndexInNucleus {
                     t = comp.tone
                 }
-                out += NFC.vowel(base: cell.base, mark: cell.mark, tone: t, upper: cell.isUpper)
+                out += table.vowel(base: cell.base, mark: cell.mark, tone: t, upper: cell.isUpper)
             } else if cell.dStroke {
-                out += NFC.dStroke(upper: cell.isUpper)
+                out += table.dStroke(upper: cell.isUpper)
             } else {
-                out += cell.isUpper ? String(cell.consonant).uppercased() : String(cell.consonant)
+                let ch: Character = cell.isUpper ? Character(String(cell.consonant).uppercased()) : cell.consonant
+                out += table.plain(ch)
             }
         }
         return out
