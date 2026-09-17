@@ -225,11 +225,17 @@ public final class Engine {
         let compHasVowel = comp.cells.contains { $0.isVowel }
         let finalUnits: [UInt16]
         if config.restoreIfInvalid && !rawKeys.isEmpty && !isValid(comp) && compHasVowel {
-            var keys = rawKeys
+            // Collapse the "doubled-w" habit (ww = one literal w) before
+            // reverting: in Telex `w` is always the ư/horn key, so a "ww" pair
+            // is always an escape to a single `w` (the fold already collapses a
+            // bare "ww" → "w"). This makes an English word typed with doubled
+            // w's revert cleanly — "wwin" → "win", "swwim" → "swim" — while
+            // words without a "ww" pair (boss, wrong) are untouched.
+            var keys = Engine.collapseDoubledW(rawKeys)
             if shouldCapitalize, let first = keys.first {
                 keys[0] = Character(first.uppercased())
             }
-            finalUnits = keys.flatMap { table.plain($0) }   // revert to raw keystrokes
+            finalUnits = keys.flatMap { table.plain($0) }   // revert to (w-collapsed) raw keystrokes
         } else {
             var comp = comp
             if shouldCapitalize, !comp.cells.isEmpty, !comp.cells[0].isUpper {
@@ -255,6 +261,28 @@ public final class Engine {
         case .vni: return ch.isNumber
         default:   return ch == "[" || ch == "]"
         }
+    }
+
+    /// Collapse each consecutive "ww" pair to a single "w" (case of the first
+    /// is kept). Used only when reverting an invalid word to raw keystrokes —
+    /// see `finalize`. In Telex the `w` key is always the ư/horn transform, so
+    /// a "ww" is always the escape for one literal `w`; collapsing it here lets
+    /// an English word typed with the common doubled-w habit ("wwin", "swwim")
+    /// revert to "win"/"swim" instead of keeping both w's.
+    private static func collapseDoubledW(_ keys: [Character]) -> [Character] {
+        var out: [Character] = []
+        var i = 0
+        while i < keys.count {
+            let ch = keys[i]
+            out.append(ch)
+            if ch == "w" || ch == "W",
+               i + 1 < keys.count, keys[i + 1] == "w" || keys[i + 1] == "W" {
+                i += 2   // keep this w, drop the paired second w
+                continue
+            }
+            i += 1
+        }
+        return out
     }
 
     private func commonPrefixCount<T: Equatable>(_ a: [T], _ b: [T]) -> Int {

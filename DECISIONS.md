@@ -45,6 +45,16 @@ literal (standard Telex "double the transform key = one literal key"), not a
 failed attempt at a Vietnamese syllable, so there is nothing to protect it
 from — it is kept as composed. See `Engine.finalize`'s `compHasVowel` check.
 
+**Doubled-w habit on restore.** Many typists carry over a habit of doubling
+`w` to get a literal `w` (since `w`→`ư`, `ww`→`w` in Telex), and apply it to
+whole English words: `win`→`wwin`, `swim`→`swwim`. When such a word reverts to
+raw at commit, `Engine.collapseDoubledW` first collapses every consecutive
+`ww` pair to a single `w`, so it restores to `win`/`swim` rather than keeping
+both w's. This is safe because in Telex `w` is *always* the ư/horn key, so a
+`ww` pair is always the escape for one literal `w` (never two intended w's);
+it only runs on the restore path (invalid/English words), and words without a
+`ww` pair (`boss`, `wrong`) are untouched.
+
 ## Positional (non-adjacent) marks
 
 Diacritic mark keys may be typed away from their base letter — at the end of the
