@@ -94,6 +94,7 @@ private struct BasicPane: View {
             Section("Chuyển đổi") {
                 Toggle("Chuyển chế độ thông minh", isOn: $model.smartSwitch)
                 Toggle("Tự ghi nhớ bảng mã theo ứng dụng", isOn: $model.rememberCodePerApp)
+                Button("Xoá ghi nhớ theo ứng dụng") { model.resetLearnedApps() }
             }
 
             Section("Phím & gửi phím") {

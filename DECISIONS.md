@@ -179,6 +179,78 @@ match a bare "\n" separator). `MacroStore.importFile` tries JSON first and
 falls back to this parser on failure, so both `.json` exports and legacy
 `.txt` files work from the same "Nhập gõ tắt…" menu item.
 
+## Smart-switch / per-app state (Phase 4)
+
+Resolves spec **E.7** ("Smart-switch / đổi app") and **Part C §7** ("Settings
+store & engine binding", §7.1 off the hot path / §7.2 persistence).
+
+**Two independent toggles**, both pre-existing on `AppModel` (previously
+inert scaffolding, now wired):
+- `smartSwitch` ("Chuyển chế độ thông minh") — remember/restore
+  **Vietnamese on/off** per frontmost app.
+- `rememberCodePerApp` ("Tự ghi nhớ bảng mã theo ứng dụng") — remember/
+  restore the **code table** per frontmost app.
+
+Either, both, or neither may be on; each field of the remembered state is
+applied independently of the other (`SmartSwitch.resolve` in
+`Sources/KeystoneInput/PerAppState.swift`). With both off, behavior is
+unchanged from before Phase 4: only the existing engine-buffer reset on app
+switch happens. An app Keystone has never seen (`remembered == nil`) always
+keeps the current state — there is nothing to restore yet, so the first time
+you visit an app it does not silently flip anything.
+
+**Off the hot path (E.7 / §7.1).** All of this runs inside the existing
+`NSWorkspace.didActivateApplicationNotification` observer in
+`AppModel.bootstrap()`, on the main queue — never inside the CGEventTap
+callback. The observer already reset the composing buffer before Phase 4;
+that reset is unconditional and now runs first, followed by the per-app
+resolve/restore logic only when at least one toggle is on.
+
+**Keystone's own bundle id and `nil` ids are skipped.** The bundle id is read
+from `notification.userInfo?[NSWorkspace.applicationUserInfoKey]`. If it's
+`nil` or equals `Bundle.main.bundleIdentifier`, Keystone's own windows (e.g.
+the Control Panel) never cause a state flip — only the buffer reset applies.
+
+**Save-on-leave + save-on-manual-change + restore-on-enter:**
+1. On activation, if tracking is on, the state we're leaving (`enabled` +
+   `codeTable` for the previous `currentBundleID`) is saved first, *then*
+   `currentBundleID` advances to the new app, *then* — if something was
+   previously learned for the new app — `SmartSwitch.resolve` computes what
+   to apply and `enabled`/`codeTable` are set under an `applyingPerAppState`
+   guard so step 2 doesn't immediately re-learn the state it's restoring.
+2. `enabled`'s and `codeTable`'s `didSet`s call `persistPerAppStateIfNeeded()`
+   after their existing engine-push work, so a manual toggle/menu change is
+   learned for the current app right away, not only at the next app switch.
+   This is skipped while `applyingPerAppState` is true (see above), while
+   tracking is off, or before `currentBundleID` is known (e.g. at launch,
+   before the first activation notification arrives).
+3. `currentBundleID` itself is tracked regardless of whether tracking is on,
+   so flipping a toggle on mid-session has an app to persist against
+   immediately rather than waiting for the next switch.
+
+**Persistence.** The pure `PerAppStateStore` (`Sources/KeystoneInput/PerAppState.swift`,
+a `[bundleID: AppInputState]` dictionary, `Codable`, no I/O) is wrapped by
+`App/PerAppStore.swift` (`@Observable @MainActor` singleton, mirrors
+`MacroStore`'s pattern), which loads/saves it as JSON at
+`~/Library/Application Support/com.tanta.keystone/appstates.json`. A missing
+file on first run is normal and not logged as an error; a decode failure
+*is* logged (via `Logger`) and leaves the in-memory store as-is rather than
+silently presenting a corrupt file as "no learned apps".
+
+**`resetToDefaults()` does not erase learned apps.** It resets the
+`smartSwitch`/`rememberCodePerApp` *settings* to their defaults (as it
+already did), but leaves `PerAppStore` untouched — learned data and settings
+are separate concerns. Only the explicit "Xoá ghi nhớ theo ứng dụng" button
+in the Control Panel's "Chuyển đổi" section (`AppModel.resetLearnedApps()`)
+wipes learned apps.
+
+**Deferred / not unit-testable headless.** The live `NSWorkspace` wiring in
+`AppModel.handleAppActivation` is integration-only, same reasoning as the
+CGEventTap itself — it needs a real app switch to exercise. What's pinned by
+`Tests/KeystoneInputTests/PerAppStateTests.swift` is the pure resolver
+(`SmartSwitch.resolve`) and the pure store (`PerAppStateStore`) that the live
+wiring is built on.
+
 ## Nucleus × coda rime (spec §5.3)
 
 A nucleus that ends in a semivowel offglide (falling diphthongs/triphthongs:

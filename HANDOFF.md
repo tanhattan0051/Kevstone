@@ -47,9 +47,14 @@ Mã nguồn OpenKey để tham chiếu (đọc để hiểu lỗi, KHÔNG chép)
   - `App/`: SwiftUI `MenuBarExtra` tối thiểu (`.accessory` — không icon Dock): bật/tắt tiếng Việt, trạng thái + nút cấp quyền Accessibility, Thoát. Chạy: `swift run Keystone`.
   - Test: 22 unit test cho translator/executor/EngineController (tap sống không test được headless — đúng như spec).
   - **Cách nghiệm thu:** `swift run Keystone` → cấp quyền Accessibility khi macOS hỏi → gõ thử ở TextEdit/Notes/Safari/Terminal.
-- 🚧 **Phase 3 (đang làm):**
+- ✅ **Phase 3 — XONG:**
   - ✅ **VNI** — `Sources/KeystoneEngine/VNI.swift` (digit 1-5 thanh, 6/7/8 dấu, 9 đ, 0 xoá thanh, double-strike undo). Dùng chung `SyllableOps.swift` (5 helper tách từ Telex) + đặt dấu/validity/restore của engine. Engine dispatch theo `config.inputMethod`. `isWordChar` cho digit qua fold khi VNI. Test: 33 ca `vni.json` + 8 cặp `DifferentialTests` (Telex↔VNI ra cùng từ).
-  - ⬜ **Còn:** Simple Telex 1/2 (biến thể `w` của Telex), Quick Telex (cc→ch… — toggle), 4 bảng mã cũ (TCVN3/VNI-Win/tổ hợp/CP1258 — cần trừu tượng `OutputTable` + diff theo code-unit + **dữ liệu byte tự soạn & kiểm chứng**), nâng bảng rime §5.3 từ luật offglide lên bảng đầy đủ.
+  - ✅ Quick Telex (toggle), Simple Telex → dispatch Telex, 5 bảng mã (Unicode dựng sẵn/tổ hợp, TCVN3, VNI-Windows, CP1258) qua `OutputTable` + `Converter`.
+  - ⬜ Còn nợ nhỏ: nâng bảng rime §5.3 từ luật offglide lên bảng đầy đủ (đủ cho v1).
+- ✅ **Phase 4 — nối engine XONG (UI khung đã có từ trước):**
+  - ✅ **Gõ tắt (macro)** — `Sources/KeystoneEngine/Macro.swift` (`MacroRule`/`MacroTable`), nổ trong `Engine.finalize` (nhánh bật tiếng Việt) + `processInactive`/`flushInactive` (nhánh tắt tiếng Việt, chỉ khi bật cả 2 cờ). `EngineConfig` thêm `macros` + 3 toggle (mặc định tắt). Import file macro OpenKey (`.txt`). Giải Open Q #9. Chi tiết ở `DECISIONS.md` mục "Macros / gõ tắt".
+  - ✅ **Smart-switch** — `Sources/KeystoneInput/PerAppState.swift` (`AppInputState`/`PerAppStateStore`/`SmartSwitch.resolve`, thuần) + `App/PerAppStore.swift` (JSON ở App Support) + xử lý trong `AppModel.handleAppActivation` (save-on-leave / restore-on-enter theo notification đổi app, bỏ qua bundle của chính Keystone). 2 toggle độc lập: `smartSwitch` (VN/English) và `rememberCodePerApp` (bảng mã). Chi tiết ở `DECISIONS.md` mục "Smart-switch".
+  - ⬜ **Còn (Phase 4):** onboarding + các toggle phụ chưa nối (`autoCapitalize` đầu câu, `quickStartConsonant`/`quickEndConsonant`, `switchKeyModifier` phím chuyển, `runAtLogin`, `showDockIcon`, `openControlPanelAtLaunch`, `checkForUpdates`, `spellCheck`, `allowFreeToneMark`, `autoFixSuggestion`, `sendEachKeystroke`) — vẫn ở dạng scaffolding `// TODO: wire`.
 
 ## ⚠️ [VERIFY] Phase 2 — phải đo trên macOS thật (chưa test được ở đây)
 1. **Cấp quyền xong có cần khởi động lại app?** Nếu `AXIsProcessTrusted()` = true nhưng `CGEvent.tapCreate` vẫn nil → cần relaunch. App hiện log lỗi + poll; nên thêm nút "Khởi động lại" nếu gặp.

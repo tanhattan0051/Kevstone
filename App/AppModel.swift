@@ -45,7 +45,12 @@ final class AppModel {
 
     // MARK: - Enable / input method (existing, tap-wired)
 
-    var enabled = true { didSet { controller.setActive(enabled) } }
+    var enabled = true {
+        didSet {
+            controller.setActive(enabled)
+            persistPerAppStateIfNeeded()
+        }
+    }
     var inputMethod: InputMethod = AppModel.loadRaw(Keys.inputMethod, default: .telex) {
         didSet {
             UserDefaults.standard.set(inputMethod.rawValue, forKey: Keys.inputMethod)
@@ -59,6 +64,7 @@ final class AppModel {
         didSet {
             UserDefaults.standard.set(codeTable.rawValue, forKey: Keys.codeTable)
             pushConfig()
+            persistPerAppStateIfNeeded()
         }
     }
 
@@ -219,6 +225,27 @@ final class AppModel {
     private var startAttempts = 0
     private var appSwitchObserver: NSObjectProtocol?
 
+    // MARK: - Smart-switch (per-app state, design spec E.7 / Part C §7)
+
+    /// Bundle id of the app Keystone currently considers "frontmost", tracked
+    /// independently of whether smart-switch is on, so turning a toggle on
+    /// mid-session immediately has a `currentBundleID` to persist against.
+    private var currentBundleID: String?
+    /// Set while restoring a remembered state onto `enabled`/`codeTable`, so
+    /// the `didSet` persistence hook below doesn't re-learn the state it is
+    /// itself in the middle of applying.
+    private var applyingPerAppState = false
+
+    /// Either per-app toggle being on means the app-activation handler needs
+    /// to track per-app state at all (E.7 covers both independently).
+    private var perAppTrackingOn: Bool { smartSwitch || rememberCodePerApp }
+
+    /// The engine-facing state as it stands right now, in the shape
+    /// `PerAppStore`/`SmartSwitch` deal in.
+    private var currentInputState: AppInputState {
+        AppInputState(vietnameseEnabled: enabled, codeTable: codeTable)
+    }
+
     private init() {
         controller = EngineController(config: EngineConfig())
         tap = EventTapController(engine: controller)
@@ -229,11 +256,17 @@ final class AppModel {
         // Re-push EngineConfig whenever macros are added/edited/imported, so
         // the running tap picks up the new rules without a restart.
         MacroStore.shared.onChange = { [weak self] in self?.pushConfig() }
-        // Reset the composing buffer when the frontmost app changes (off hot path).
+        // Reset the composing buffer when the frontmost app changes, and (when
+        // smart-switch and/or per-app code table is on) learn/restore that
+        // app's input state — all off the hot path (E.7 / §7.1), since this
+        // notification observer runs independently of the CGEventTap callback.
         appSwitchObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor in self?.controller.resetBuffer() }
+        ) { [weak self] notification in
+            // Pull the bundle id out here (NSRunningApplication/Notification
+            // aren't Sendable) so only a plain String? crosses into the Task.
+            let newBundleID = (notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication)?.bundleIdentifier
+            Task { @MainActor in self?.handleAppActivation(newBundleID: newBundleID) }
         }
         if !accessibilityTrusted { Permissions.promptAccessibility() }
         refresh()
@@ -306,6 +339,57 @@ final class AppModel {
         openControlPanelAtLaunch = false
         checkForUpdates = true
         showDockIcon = false
+    }
+
+    /// "Xoá ghi nhớ theo ứng dụng" — wipes every app Keystone has learned
+    /// state for. Does NOT touch settings (`smartSwitch`/`rememberCodePerApp`
+    /// stay whatever they were) — see `resetToDefaults()`.
+    func resetLearnedApps() {
+        PerAppStore.shared.reset()
+    }
+
+    /// Handles `NSWorkspace.didActivateApplicationNotification`: always
+    /// resets the composing buffer, then — when the newly-activated app is a
+    /// real other app (not `nil`, not Keystone's own windows) and at least
+    /// one smart-switch toggle is on — saves the state we're leaving behind
+    /// and restores whatever was learned for the app we're entering.
+    private func handleAppActivation(newBundleID: String?) {
+        controller.resetBuffer()
+
+        guard
+            let newBundleID,
+            newBundleID != Bundle.main.bundleIdentifier
+        else { return }
+
+        guard perAppTrackingOn else {
+            currentBundleID = newBundleID
+            return
+        }
+
+        if let oldBundleID = currentBundleID {
+            PerAppStore.shared.remember(currentInputState, for: oldBundleID)
+        }
+        currentBundleID = newBundleID
+
+        guard let remembered = PerAppStore.shared.state(for: newBundleID) else { return }
+        let resolved = SmartSwitch.resolve(
+            remembered: remembered,
+            current: currentInputState,
+            smartSwitch: smartSwitch,
+            rememberCodeTable: rememberCodePerApp
+        )
+        applyingPerAppState = true
+        enabled = resolved.vietnameseEnabled
+        codeTable = resolved.codeTable
+        applyingPerAppState = false
+    }
+
+    /// Called from the `enabled`/`codeTable` `didSet`s: a manual change (not
+    /// one we're applying ourselves via `handleAppActivation`) is learned for
+    /// the current app immediately, not only on the next app switch.
+    private func persistPerAppStateIfNeeded() {
+        guard !applyingPerAppState, perAppTrackingOn, let bundleID = currentBundleID else { return }
+        PerAppStore.shared.remember(currentInputState, for: bundleID)
     }
 
     private func startTap() {
