@@ -258,3 +258,51 @@ A nucleus that ends in a semivowel offglide (falling diphthongs/triphthongs:
 protects English words such as `coins`, `ruins`, `rains` (which would otherwise
 become pseudo-Vietnamese) while keeping genuine rimes like `oan` (`toán`,
 `loán`), `uôn` (`muốn`) and `uyt` (`suýt`) valid.
+
+## System toggles (Phase 4)
+
+Three of the "Hệ thống" tab toggles in `AppModel` moved from persistence-only
+scaffolding to real behavior; a fourth stays dormant on purpose.
+
+**`runAtLogin` → `SMAppService.mainApp`.** `didSet` persists first, then
+`register()`/`unregister()`s the login item. A failed call is logged via
+`Logger.error` with context and the property is reverted to its actual state
+(rather than leaving the toggle claiming a login-item state that isn't true),
+guarded by a private `isSyncingLoginItem` flag so the revert's own
+reassignment doesn't re-enter `didSet` and fire another register/unregister.
+`bootstrap()` calls `reconcileLoginItemStatus()` once at launch, under the
+same guard, to catch drift between the persisted toggle and
+`SMAppService.mainApp.status` (e.g. the user removed the login item from
+System Settings directly): `.enabled` → `true`, `.notRegistered`/`.notFound`
+→ `false`, `.requiresApproval` is left as-is and just logged.
+
+**`showDockIcon` → `NSApp.setActivationPolicy`.** `didSet` sets `.regular`/
+`.accessory` and, when turning the icon on, also calls
+`NSApp.activate(ignoringOtherApps: true)` so the new Dock tile is focused
+immediately rather than sitting there unfocused.
+`AppDelegate.applicationDidFinishLaunching` in `KeystoneApp.swift` now sets
+the *initial* policy from the persisted setting
+(`AppModel.shared.showDockIcon ? .regular : .accessory`) instead of the old
+hardcoded `.accessory`; the single-instance check → policy → `bootstrap()`
+order is unchanged.
+
+**`openControlPanelAtLaunch` → a scene-registered `openWindow` closure.**
+`AppDelegate`/`bootstrap()` run before any SwiftUI scene exists, so
+`openWindow` isn't available there. Instead, `AppModel.openControlPanelRequest`
+is a closure the SwiftUI layer fills in once its scene appears —
+`MenuBarContent`'s `.onAppear` captures `@Environment(\.openWindow)` and sets
+`model.openControlPanelRequest = { openWindow(id: WindowID.controlPanel) }`,
+then calls `model.performLaunchOpenIfNeeded()`, which (guarded by
+`didAttemptLaunchOpen` so it only ever acts once) activates the app and
+invokes the closure if `openControlPanelAtLaunch` is on.
+
+**`checkForUpdates` stays dormant.** Real update checking needs a signed
+release feed / appcast (Sparkle), which is Phase 5 work and doesn't exist
+yet. The toggle still persists to `UserDefaults` as before; nothing reads it
+yet.
+
+**Integration-only, not unit-testable headless.** `SMAppService`,
+`NSApp.setActivationPolicy`, and `openWindow` all need a real running app
+(same reasoning as the CGEventTap and the `NSWorkspace` smart-switch wiring
+above) — verified by building and by manual exercise on a real Mac, not by
+new unit tests.

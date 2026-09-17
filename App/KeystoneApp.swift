@@ -1,8 +1,9 @@
 // KeystoneApp.swift — app entry point.
 //
-// A menu-bar-only ("agent") app: no Dock icon, no main window. The activation
-// policy is set to `.accessory` in the delegate as soon as the app finishes
-// launching, and the entire UI lives in the MenuBarExtra's menu.
+// A menu-bar-first ("agent") app: no main window, and no Dock icon unless the
+// user opted into one ("Hiện icon trên Dock" — AppModel.showDockIcon). The
+// activation policy is set as soon as the app finishes launching, and the
+// entire UI lives in the MenuBarExtra's menu plus the Window scenes below.
 
 import SwiftUI
 import AppKit
@@ -24,7 +25,7 @@ struct KeystoneApp: App {
         MenuBarExtra {
             MenuBarContent(model: model)
         } label: {
-            Image(systemName: model.enabled ? "character.bubble.fill" : "character.bubble")
+            MenuBarLabel(model: model)
         }
         .menuBarExtraStyle(.menu)
 
@@ -50,6 +51,23 @@ struct KeystoneApp: App {
     }
 }
 
+/// The menu-bar icon. Unlike the menu's *content* (whose `onAppear` only
+/// fires when the menu is first opened), the label is rendered at launch —
+/// so it's the reliable point to register the Control Panel opener and honor
+/// "Bật bảng này khi khởi động" (`AppModel.openControlPanelAtLaunch`).
+private struct MenuBarLabel: View {
+    @Bindable var model: AppModel
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        Image(systemName: model.enabled ? "character.bubble.fill" : "character.bubble")
+            .onAppear {
+                model.openControlPanelRequest = { openWindow(id: WindowID.controlPanel) }
+                model.performLaunchOpenIfNeeded()
+            }
+    }
+}
+
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         // One Keystone per user — a second copy would double-tap every key.
@@ -63,7 +81,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSApp.terminate(nil)
             return
         }
-        NSApp.setActivationPolicy(.accessory)   // menu-bar agent, no Dock tile
+        // Honor the saved "Hiện icon trên Dock" setting instead of always
+        // hiding the Dock tile — see AppModel.showDockIcon.
+        NSApp.setActivationPolicy(AppModel.shared.showDockIcon ? .regular : .accessory)
         AppModel.shared.bootstrap()
     }
     func applicationWillTerminate(_ notification: Notification) {

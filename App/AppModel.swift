@@ -16,6 +16,7 @@ import SwiftUI
 import AppKit
 import Observation
 import os
+import ServiceManagement
 import KeystoneEngine
 import KeystoneInput
 
@@ -185,29 +186,63 @@ final class AppModel {
         }
     }
 
-    /// "Khởi động cùng macOS"
-    // TODO: wire to SMAppService.mainApp (design spec Part C §8).
+    /// "Khởi động cùng macOS" — backed by `SMAppService.mainApp`. `didSet`
+    /// registers/unregisters the login item; `isSyncingLoginItem` guards the
+    /// revert-on-failure and launch-time reconciliation below from re-entering
+    /// this same `didSet` and issuing a redundant register/unregister call.
     var runAtLogin: Bool = AppModel.loadBool(Keys.runAtLogin, default: false) {
-        didSet { UserDefaults.standard.set(runAtLogin, forKey: Keys.runAtLogin) }
+        didSet {
+            UserDefaults.standard.set(runAtLogin, forKey: Keys.runAtLogin)
+            guard !isSyncingLoginItem else { return }
+            do {
+                if runAtLogin {
+                    try SMAppService.mainApp.register()
+                } else {
+                    try SMAppService.mainApp.unregister()
+                }
+            } catch {
+                Self.log.error("SMAppService \(self.runAtLogin ? "register" : "unregister", privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
+                // The OS call failed, so the toggle would otherwise misreport
+                // reality — revert it. Guard re-entrancy so this assignment
+                // doesn't loop back into another register/unregister attempt.
+                isSyncingLoginItem = true
+                runAtLogin.toggle()
+                isSyncingLoginItem = false
+            }
+        }
     }
 
-    /// "Bật bảng này khi khởi động" — open the Control Panel at launch.
-    // TODO: wire to launch logic (KeystoneApp bootstrap).
+    /// "Bật bảng này khi khởi động" — open the Control Panel at launch. The
+    /// actual opening happens via `openControlPanelRequest`, set once the
+    /// SwiftUI scene exists (see `performLaunchOpenIfNeeded()`); `openWindow`
+    /// isn't available from `AppDelegate`/`bootstrap()`.
     var openControlPanelAtLaunch: Bool = AppModel.loadBool(Keys.openControlPanelAtLaunch, default: false) {
         didSet { UserDefaults.standard.set(openControlPanelAtLaunch, forKey: Keys.openControlPanelAtLaunch) }
     }
 
     /// "Kiểm tra bản mới khi khởi động"
-    // TODO: wire to an update checker (design spec Open Q #9 — Sparkle vs bespoke).
+    // TODO: wire to an update checker (design spec Open Q #9 — Sparkle vs bespoke, Phase 5).
     var checkForUpdates: Bool = AppModel.loadBool(Keys.checkForUpdates, default: true) {
         didSet { UserDefaults.standard.set(checkForUpdates, forKey: Keys.checkForUpdates) }
     }
 
     /// "Hiện icon trên Dock"
-    // TODO: wire to NSApp.setActivationPolicy (design spec Part C §1.1).
     var showDockIcon: Bool = AppModel.loadBool(Keys.showDockIcon, default: false) {
-        didSet { UserDefaults.standard.set(showDockIcon, forKey: Keys.showDockIcon) }
+        didSet {
+            UserDefaults.standard.set(showDockIcon, forKey: Keys.showDockIcon)
+            NSApp.setActivationPolicy(showDockIcon ? .regular : .accessory)
+            if showDockIcon {
+                // Without this, turning the toggle on leaves the new Dock
+                // tile present but unfocused until the user clicks something.
+                NSApp.activate(ignoringOtherApps: true)
+            }
+        }
     }
+
+    /// Closure the SwiftUI layer registers once the `MenuBarExtra` scene
+    /// exists, since `openWindow` is only available in that environment (not
+    /// in `AppDelegate`/`bootstrap()`). Invoked by `performLaunchOpenIfNeeded()`.
+    var openControlPanelRequest: (() -> Void)?
 
     // MARK: - Permission / tap status (existing)
 
@@ -224,6 +259,16 @@ final class AppModel {
     private var tapStarted = false
     private var startAttempts = 0
     private var appSwitchObserver: NSObjectProtocol?
+
+    // MARK: - System toggle bookkeeping (Phase 4)
+
+    /// Set while `runAtLogin` is being corrected programmatically (revert on
+    /// register/unregister failure, or launch-time reconciliation against
+    /// `SMAppService.mainApp.status`) so that reassignment doesn't re-enter
+    /// the `didSet` and issue another register/unregister call.
+    private var isSyncingLoginItem = false
+    /// `performLaunchOpenIfNeeded()` should only ever act once per launch.
+    private var didAttemptLaunchOpen = false
 
     // MARK: - Smart-switch (per-app state, design spec E.7 / Part C §7)
 
@@ -253,6 +298,7 @@ final class AppModel {
     }
 
     func bootstrap() {
+        reconcileLoginItemStatus()
         // Re-push EngineConfig whenever macros are added/edited/imported, so
         // the running tap picks up the new rules without a restart.
         MacroStore.shared.onChange = { [weak self] in self?.pushConfig() }
@@ -287,6 +333,45 @@ final class AppModel {
     func requestAccessibility() {
         Permissions.promptAccessibility()
         Permissions.openAccessibilitySettings()
+    }
+
+    /// Reconciles the persisted `runAtLogin` toggle with `SMAppService`'s
+    /// actual status once at launch — e.g. the user removed the login item
+    /// via System Settings directly, or a previous register call silently
+    /// didn't stick across an app move/reinstall.
+    private func reconcileLoginItemStatus() {
+        let status = SMAppService.mainApp.status
+        let actual: Bool
+        switch status {
+        case .enabled:
+            actual = true
+        case .notRegistered, .notFound:
+            actual = false
+        case .requiresApproval:
+            // Registered but pending the user's approval in System Settings —
+            // leave the toggle as the user set it, just log for visibility.
+            Self.log.info("SMAppService login item requires approval in System Settings")
+            return
+        @unknown default:
+            Self.log.info("SMAppService.mainApp.status returned an unrecognized case: \(String(describing: status), privacy: .public)")
+            return
+        }
+        guard actual != runAtLogin else { return }
+        isSyncingLoginItem = true
+        runAtLogin = actual
+        isSyncingLoginItem = false
+    }
+
+    /// Opens the Control Panel at launch if the user asked for it. Must run
+    /// after the SwiftUI scene has registered `openControlPanelRequest`
+    /// (`openWindow` doesn't exist in `AppDelegate`/`bootstrap()`), and only
+    /// once per launch.
+    func performLaunchOpenIfNeeded() {
+        guard !didAttemptLaunchOpen else { return }
+        didAttemptLaunchOpen = true
+        guard openControlPanelAtLaunch else { return }
+        NSApp.activate(ignoringOtherApps: true)
+        openControlPanelRequest?()
     }
 
     /// Relaunch a fresh instance of Keystone and quit this one — the fix for the
