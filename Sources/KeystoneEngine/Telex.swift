@@ -169,9 +169,16 @@ enum Telex {
                 cells.append(.cons("d", upper: up))
                 return .literal
             }
-            if let di = SyllableOps.onsetDIndex(cells) {  // dd / dangd / dadng → đ on the onset d
-                cells[di].dStroke = true
-                return .dstroke(index: di)
+            if let di = SyllableOps.onsetDIndex(cells) {
+                // Fire on adjacent dd, or when the syllable is already closed (a
+                // coda exists): dd→đ, dangd→đang, được/đường at commit. A lone d
+                // after an OPEN syllable (English "dad", "did", "deed") stays a
+                // literal letter so those words aren't turned into đa/đi/đê.
+                let adjacent = di == cells.count - 1
+                if adjacent || !SyllableOps.currentCoda(cells).isEmpty {
+                    cells[di].dStroke = true
+                    return .dstroke(index: di)
+                }
             }
             cells.append(.cons("d", upper: up)); return .base
         }
@@ -190,14 +197,23 @@ enum Telex {
                 return .literal
             }
 
-            if canCirc,
-               let ei = cells.lastIndex(where: { $0.isVowel && $0.base == bv && $0.mark == .none }) {
-                // Apply circumflex to the nearest matching unmarked vowel when
-                // either it's the immediately-preceding vowel (adjacent double:
-                // oo→ô, aa→â, ee→ê) OR treating this key as a *new* nucleus vowel
-                // would not form a legal nucleus (so the user meant a mark, even
-                // non-adjacently: roiof→rồi, loiox→lỗi). Real triphthongs whose
-                // append stays legal (ngoaos→ngoáo) fall through and append.
+            // The circumflex target must be in the CURRENT (trailing) nucleus —
+            // the matching vowel with no consonant between it and the buffer end.
+            // This keeps roiof→rồi, toio→tôi (mark within the same vowel run)
+            // while leaving English "mama"/"nana"/"nono" alone (the earlier a/o
+            // is across a consonant, so no circumflex is injected).
+            var ei: Int? = nil
+            if canCirc {
+                for i in cells.indices.reversed() {
+                    if !cells[i].isVowel { break }
+                    if cells[i].base == bv && cells[i].mark == .none { ei = i; break }
+                }
+            }
+            if let ei {
+                // Apply when it's the immediately-preceding vowel (adjacent
+                // double: oo→ô, aa→â, ee→ê) OR treating this key as a *new*
+                // nucleus vowel would not form a legal nucleus (so the user meant
+                // a mark: roiof→rồi). Real triphthongs (ngoaos→ngoáo) append.
                 let adjacent = ei == SyllableOps.lastVowelIndex(cells)
                 let appended = SyllableOps.vowelLetters(cells) + String(bv.letter)
                 if adjacent || !Phonology.isNucleusPrefix(appended) {

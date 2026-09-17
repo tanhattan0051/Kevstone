@@ -134,7 +134,11 @@ enum VNI {
                 cells[idx].dStroke = false; cells.append(.cons("9", upper: up)); return .literal
             }
             if let di = SyllableOps.onsetDIndex(cells) {  // d9 / dang9 → đ on the onset d
-                cells[di].dStroke = true; return .dstroke(index: di)
+                // Adjacent (d then 9) or a closed syllable only — mirrors Telex đ.
+                let adjacent = di == cells.count - 1
+                if adjacent || !SyllableOps.currentCoda(cells).isEmpty {
+                    cells[di].dStroke = true; return .dstroke(index: di)
+                }
             }
             cells.append(.cons("9", upper: up)); return .base
         }

@@ -65,9 +65,28 @@ public final class Engine {
         return r
     }
 
+    /// An OPEN "ươ" (both horns, the u+o pair is the whole nucleus and the o is
+    /// the last cell) is not a real Vietnamese nucleus — it is the rare "uơ"
+    /// (thuở, huơ, khuơ). We only know the syllable stayed open at commit, so we
+    /// downgrade ư→u here; hương/nước/người/rượu keep ươ because they are closed
+    /// or carry an offglide (so they never reach this shape).
+    private func downgradeOpenUoHorn(_ comp: Composition) -> Composition {
+        var comp = comp
+        let cells = comp.cells
+        let vowels = cells.indices.filter { cells[$0].isVowel }
+        guard vowels.count == 2 else { return comp }
+        let i = vowels[0], j = vowels[1]
+        guard j == i + 1, j == cells.count - 1 else { return comp }
+        guard cells[i].base == .u, cells[i].mark == .horn,
+              cells[j].base == .o, cells[j].mark == .horn else { return comp }
+        if i > 0, !cells[i - 1].isVowel, cells[i - 1].consonant == "q" { return comp }  // qu-glide → keep
+        comp.cells[i].mark = .none
+        return comp
+    }
+
     // commit: apply restore-if-invalid, produce the edit that turns on-screen -> final (+ optional boundary char)
     private func finalize(boundary: Character?) -> EngineResult {
-        let comp = interpret(rawKeys)
+        let comp = downgradeOpenUoHorn(interpret(rawKeys))
         let table = outputTable(for: config.codeTable)
         let finalUnits: [UInt16]
         if config.restoreIfInvalid && !rawKeys.isEmpty && !isValid(comp) {

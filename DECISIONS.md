@@ -45,8 +45,25 @@ horn, breve) and đ now also apply to the nearest eligible earlier letter:
 A mark is applied non-adjacently only when treating the key as a new nucleus
 vowel would form an illegal nucleus (gated by `isNucleusPrefix`), so real
 triphthongs (`ngoaos`→ngoáo) and English words (`add`) are left alone. đ only
-ever strokes an onset d (a `d` after a vowel, as in English "add", stays
-literal). Implemented for Telex (aa/ee/oo, w, dd) and VNI (6/7/8/9).
+ever strokes an onset d. Implemented for Telex (aa/ee/oo, w, dd) and VNI (6/7/8/9).
+
+Bounds added to protect common English words (from the full Telex sweep):
+- **Circumflex targets only the current (trailing) nucleus** — no consonant
+  between the vowel and the buffer end — so `mama`/`nana`/`nono` stay literal
+  while `roiof`→rồi, `toio`→tôi (mark within one vowel run) still work.
+- **đ fires only on an adjacent `dd` or a closed syllable** (a coda already
+  exists): `ddang`/`dangd`→đang, but `dad`/`did`/`deed` stay English. The
+  rarer mid-word trigger `dadng` is dropped as the cost of that protection.
+- Note: `w` after a vowel and adjacent `oo`→ô are standard Telex (Vietnamese
+  keys), so `cow`→cơ, `moon`→môn are correct, not bugs.
+
+## Open ươ → uơ downgrade (spec Open Question #7)
+
+An OPEN `ươ` (both horns, the u+o pair is the whole nucleus, nothing after the
+o) is not a real Vietnamese nucleus, so at commit it downgrades to `uơ`,
+letting `thuowr`→thuở, `huow`→huơ, `khuow`→khuơ be typed naturally with `w`.
+Closed forms and offglide forms keep `ươ` (they never reach this shape):
+`hương`, `nước`, `người`, `rượu`. The `[` direct key still works too.
 
 ## Tone placement
 
