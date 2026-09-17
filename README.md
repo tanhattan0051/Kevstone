@@ -201,6 +201,18 @@ Bản quyền © 2026 **Tạ Nhật Tân**.
 
 **Tạ Nhật Tân** — mọi góp ý xin gửi về **tanhattan0051@gmail.com**.
 
+## Ủng hộ tác giả
+
+Nếu Keystone hữu ích với bạn, đừng quên ủng hộ tác giả bằng cách mời **một ly cà phê hay lon bò húc** ☕🥤
+
+<div align="center">
+  <img src="Design/momo-qr.jpg" width="260" alt="Ủng hộ qua MoMo — TA NHAT TAN" />
+  <br/>
+  <sub>Quét bằng <b>MoMo</b> hoặc app ngân hàng (VietQR · napas 247) — <b>TA NHAT TAN</b></sub>
+</div>
+
+Cảm ơn các bạn rất nhiều! 🙏
+
 ## Lời cảm ơn
 
 Cảm ơn [**OpenKey**](https://github.com/tuyenvm/OpenKey) của Tuyen Mai — nguồn cảm hứng và là tham
