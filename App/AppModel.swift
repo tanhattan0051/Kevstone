@@ -160,8 +160,10 @@ final class AppModel {
         didSet { UserDefaults.standard.set(spellCheck, forKey: Keys.spellCheck) }
     }
 
-    /// "Viết Hoa chữ cái đầu câu"
-    var autoCapitalize: Bool = AppModel.loadBool(Keys.autoCapitalize, default: true) {
+    /// "Viết Hoa chữ cái đầu câu". Default OFF — sentence-start detection in
+    /// a system-wide IME is unreliable (see DECISIONS.md "Quick consonants &
+    /// auto-capitalize"), so this ships dormant like the other Phase 4 flags.
+    var autoCapitalize: Bool = AppModel.loadBool(Keys.autoCapitalize, default: false) {
         didSet {
             UserDefaults.standard.set(autoCapitalize, forKey: Keys.autoCapitalize)
             pushConfig()
@@ -521,7 +523,7 @@ final class AppModel {
         spellCheck = true
         allowFreeToneMark = true
         freeMarkAcrossCoda = false
-        autoCapitalize = true
+        autoCapitalize = false
         quickStartConsonant = false
         quickEndConsonant = false
         smartSwitch = true

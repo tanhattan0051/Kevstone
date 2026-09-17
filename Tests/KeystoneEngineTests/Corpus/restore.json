@@ -6,5 +6,5 @@
   { "name": "chua plus a keeps horn (layer1, restore off)", "keys": "chuwaa", "method": "telex", "orthography": "modern", "restoreIfInvalid": false, "expected": "chưaa" },
   { "name": "chua plus a reverts (restore on)", "keys": "chuwaa", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "chuwaa" },
   { "name": "valid word not reverted", "keys": "vieejt", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "việt" },
-  { "name": "ddd reverts when restore on", "keys": "ddd", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "ddd" }
+  { "name": "ddd -> dd, no-vowel double-strike keeps composed under restore-on", "keys": "ddd", "method": "telex", "orthography": "modern", "restoreIfInvalid": true, "expected": "dd" }
 ]

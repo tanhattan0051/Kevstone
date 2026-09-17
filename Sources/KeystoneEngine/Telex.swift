@@ -36,6 +36,7 @@ private enum Effect: Equatable {
     case toneKey(Character)                    // set a tone via this key
     case removeTone
     case mark(key: Character, targets: [Int])  // applied circumflex/breve/horn
+    case wInsert(index: Int)                   // bare w inserted a fresh ư vowel
     case dstroke(index: Int)                   // dd -> đ
     case literal                               // a double-strike undo emitted a literal
 }
@@ -137,6 +138,18 @@ enum Telex {
 
         // 3. w — horn / breve / bare ư
         if lo == "w" {
+            // Standard Telex double-strike: bare w inserted a fresh ư last
+            // time (nothing to horn/breve, so it appended a new vowel rather
+            // than marking an existing one) — a second w undoes THAT
+            // insertion and leaves one literal w, e.g. ww -> w, tww -> tw.
+            // This is distinct from the .mark double-strike right below,
+            // which undoes a horn/breve applied to an EXISTING vowel
+            // (uww -> uw, aww -> aw).
+            if case .wInsert(let idx) = prevEffect, idx < cells.count {
+                cells.remove(at: idx)
+                cells.append(.cons("w", upper: up))
+                return .literal
+            }
             // double-strike undo
             if case .mark(let k, let targets) = prevEffect, k == "w" {
                 for t in targets where t < cells.count { cells[t].mark = .none }
@@ -169,9 +182,11 @@ enum Telex {
                 }
                 cells[vi].mark = .none
             }
-            // bare w → insert ư
+            // bare w → insert ư (a fresh vowel, not a mark on an existing
+            // one — tracked separately as `.wInsert` so a following w undoes
+            // the insertion itself, per standard Telex ww -> w)
             cells.append(.vowel(.u, .horn, upper: up))
-            return .mark(key: "w", targets: [cells.count - 1])
+            return .wInsert(index: cells.count - 1)
         }
 
         // 4. [ → ơ direct key

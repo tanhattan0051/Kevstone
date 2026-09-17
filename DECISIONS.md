@@ -30,10 +30,20 @@ own key (double-strike toggle), not by `z`.
    makes English words type correctly: `wrong` → `wrong`, `boss` → `boss`.
 
 **Consequence:** the classic double-strike demonstrations `ass` → `as`,
-`aaa` → `aa`, `ddd` → `dd` hold only with `restoreIfInvalid` **off** — they
-isolate layer 1 in isolation. With `restoreIfInvalid` **on** (the default),
-those same key sequences revert at commit to the raw keys (`ass`, `aaa`,
-`ddd`), because the intermediate form is not a valid syllable.
+`aaa` → `aa` hold only with `restoreIfInvalid` **off** — they isolate layer 1
+in isolation. With `restoreIfInvalid` **on** (the default), those key
+sequences revert at commit to the raw keys (`ass`, `aaa`), because the
+intermediate form is not a valid syllable AND contains a vowel — a failed
+*Vietnamese* syllable that must be protected as English (`ass`/`aaa` aren't
+words, but the same rule is what protects `wrong`/`boss`/`coins`, which are).
+
+`ddd` → `dd` and `ww` → `w`, however, hold even with `restoreIfInvalid`
+**on** (the default) — a **no-vowel** composed result (`dd`, `w`, `tw`) is
+never reverted, restore-on or off. The rule: restore-to-raw fires only when
+the composed word contains a vowel; a no-vowel result is a deliberate
+literal (standard Telex "double the transform key = one literal key"), not a
+failed attempt at a Vietnamese syllable, so there is nothing to protect it
+from — it is kept as composed. See `Engine.finalize`'s `compHasVowel` check.
 
 ## Positional (non-adjacent) marks
 
@@ -445,6 +455,22 @@ All three flags default OFF; `App/AppModel.swift`'s
 `quickStartConsonant`/`quickEndConsonant`/`autoCapitalize` properties (previously
 persistence-only scaffolding) now also call `pushConfig()` in their `didSet`,
 same pattern as `quickTelex`/`restoreIfInvalid`.
+
+**`autoCapitalize` defaults OFF at the app layer too, and `reset()` clears
+`atSentenceStart`.** `App/AppModel.swift`'s `autoCapitalize` UI toggle used
+to default `true` (a leftover from before this flag was wired to the
+engine), out of step with `EngineConfig`'s own OFF default above — it is now
+`false` in both `loadBool(..., default:)` and `resetToDefaults()`.
+Sentence-start detection is unreliable in a system-wide IME (no real
+knowledge of cursor context), so the feature stays opt-in. Separately,
+`Engine.reset()` — called on caret moves, app switches, and other nav keys —
+now sets `atSentenceStart = false` instead of `true`: a reset has no actual
+information that the next word starts a sentence, so it must not
+auto-capitalize it. Only a real sentence terminator (`.`/`!`/`?`/newline)
+seen by `updateSentenceStart` sets it back to `true`. A brand-new `Engine`'s
+stored-property initial value is untouched (still `true`), so a fresh
+engine's very first word is still treated as sentence-initial — this is what
+the existing `AutoCapitalizeTests` suite (fresh engines) relies on.
 
 ## Onboarding / permissions (Phase 4)
 

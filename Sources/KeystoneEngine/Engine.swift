@@ -67,7 +67,14 @@ public final class Engine {
     public func flush() -> EngineResult { finalize(boundary: nil) }
     public func reset() {
         rawKeys = []; prevUnits = []
-        atSentenceStart = true
+        // NOT `true`: a reset fires on a caret move / app switch / nav key,
+        // none of which tell the engine it's actually at a sentence start —
+        // so the next word must NOT auto-capitalize just because the buffer
+        // was cleared. A brand-new `Engine`'s stored-property initial value
+        // (above) is left at `true` on purpose: that only affects the very
+        // first word of a fresh engine, which existing `AutoCapitalize` tests
+        // rely on.
+        atSentenceStart = false
         englishRawKeys = []
     }
 
@@ -207,8 +214,17 @@ public final class Engine {
         // branch actually wins below, on top of the already-decided isValid
         // result — capitalization never changes validity (see DECISIONS.md).
         let shouldCapitalize = config.autoCapitalize && atSentenceStart && !rawKeys.isEmpty
+        // A composition with NO vowel at all (e.g. "w", "tw", "dd" after a
+        // double-strike undo) can never be a real Vietnamese syllable, but it
+        // also isn't a failed ATTEMPT at one — it's a deliberate literal
+        // (standard Telex ww -> w, ddd -> dd). Only a composition that DOES
+        // contain a vowel and still fails validity is treated as a failed
+        // Vietnamese syllable (i.e. actually an English word) worth
+        // protecting via revert-to-raw. See DECISIONS.md "Restore-if-invalid:
+        // two layers".
+        let compHasVowel = comp.cells.contains { $0.isVowel }
         let finalUnits: [UInt16]
-        if config.restoreIfInvalid && !rawKeys.isEmpty && !isValid(comp) {
+        if config.restoreIfInvalid && !rawKeys.isEmpty && !isValid(comp) && compHasVowel {
             var keys = rawKeys
             if shouldCapitalize, let first = keys.first {
                 keys[0] = Character(first.uppercased())
