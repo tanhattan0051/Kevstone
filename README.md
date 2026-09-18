@@ -194,7 +194,7 @@ ngược cho TCVN3 / VNI-Windows · bộ kiểm tra bản mới thật (Sparkle)
 
 ## Giấy phép
 
-Keystone là **phần mềm tự do**, phát hành dưới **[GNU General Public License v3.0](LICENSE)** (GPLv3) — cùng giấy phép với [OpenKey](https://github.com/tuyenvm/OpenKey).
+Keystone là **phần mềm tự do**, phát hành dưới **[GNU General Public License v3.0](LICENSE)** (GPLv3).
 
 Bạn được tự do dùng, nghiên cứu, sửa đổi và chia sẻ Keystone (kể cả cho mục đích thương mại). Điều kiện: mọi bản phân phối — kể cả bản đã sửa — phải **giữ nguyên mã nguồn mở dưới cùng giấy phép GPLv3**. Xem đầy đủ ở [`LICENSE`](LICENSE).
 
