@@ -15,7 +15,7 @@ diệt tận gốc lỗi kinh điển *"đang gõ tự nhiên mất tiếng Vi�
 ![Swift](https://img.shields.io/badge/Swift-6.0-F05138?logo=swift&logoColor=white)
 ![UI](https://img.shields.io/badge/UI-SwiftUI-1575F9)
 ![Tests](https://img.shields.io/badge/tests-154%20·%20251%20ca%20corpus-brightgreen)
-![License](https://img.shields.io/badge/License-MIT-3DA639)
+![License](https://img.shields.io/badge/License-PolyForm%20Noncommercial-orange)
 [![CI](https://github.com/tanhattan0051/Kevstone/actions/workflows/ci.yml/badge.svg)](https://github.com/tanhattan0051/Kevstone/actions/workflows/ci.yml)
 
 [Vì sao Keystone](#vì-sao-keystone) ·
@@ -194,7 +194,11 @@ ngược cho TCVN3 / VNI-Windows · bộ kiểm tra bản mới thật (Sparkle)
 
 ## Giấy phép
 
-Phát hành theo giấy phép **MIT** — xem [`LICENSE`](LICENSE).
+Keystone dùng **giấy phép kép (dual-license)**:
+
+- 🆓 **Phi thương mại — miễn phí:** [PolyForm Noncommercial License 1.0.0](https://polyformproject.org/licenses/noncommercial/1.0.0) — cá nhân, học tập, nghiên cứu, dự án phi lợi nhuận được dùng, sửa và chia sẻ thoải mái. Xem [`LICENSE`](LICENSE).
+- 💼 **Thương mại:** mọi mục đích kinh doanh cần **giấy phép thương mại riêng** — liên hệ **tanhattan0051@gmail.com** để mua.
+
 Bản quyền © 2026 **Tạ Nhật Tân**.
 
 ## Tác giả
