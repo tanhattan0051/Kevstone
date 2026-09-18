@@ -41,13 +41,46 @@ public final class EventTapController: @unchecked Sendable {
     private let behaviorLock = OSAllocatedUnfairLock()
     private var behavior = InputBehavior()
 
-    // Held-key echo guard state machine — see EchoGuard.swift. Only ever
-    // touched on the tap thread.
-    private var echoGuard = EchoGuard()
+    /// How many times the OS has disabled our tap. Logged (once per event, never
+    /// per keystroke) because a silently re-enabled tap hides real information:
+    /// while chasing the duplicate-key bug this counter is what ruled out
+    /// "the tap timed out and the OS re-delivered the key". Tap thread only.
+    private var tapDisableCount = 0
+
+    /// The synthetic Backspace pair, created ONCE and re-posted forever.
+    /// OpenKey — same tap architecture, no phantom echo — does exactly this;
+    /// Keystone used to allocate two fresh CGEvents per backspace on the tap hot
+    /// path, which is the last material divergence from that reference and also
+    /// the reason an English word revert cost 2N allocations inside one callback.
+    private let backspaceDown: CGEvent?
+    private let backspaceUp: CGEvent?
 
     public init(engine: EngineController) {
         self.engine = engine
-        self.synthSource = CGEventSource(stateID: .privateState)
+        let src = CGEventSource(stateID: .privateState)
+        self.synthSource = src
+        // Posting a synthetic event makes macOS SUPPRESS real hardware events
+        // for `localEventsSuppressionInterval` — 0.25s by DEFAULT, the same order
+        // as the phantom's 150-650ms delay, and it only ever kicks in on the
+        // Backspace-emitting path because that is the only path that injects a
+        // real keycode. A suppressed-then-released physical key is exactly the
+        // shape of the duplicate we see. Anything that injects events (IMEs,
+        // automation tools) has to zero this and permit local events through.
+        src?.localEventsSuppressionInterval = 0
+        let permitAll: CGEventFilterMask =
+            [.permitLocalMouseEvents, .permitLocalKeyboardEvents, .permitSystemDefinedEvents]
+        src?.setLocalEventsFilterDuringSuppressionState(
+            permitAll, state: .eventSuppressionStateSuppressionInterval)
+        src?.setLocalEventsFilterDuringSuppressionState(
+            permitAll, state: .eventSuppressionStateRemoteMouseDrag)
+        let down = CGEvent(keyboardEventSource: src, virtualKey: 51, keyDown: true)
+        let up = CGEvent(keyboardEventSource: src, virtualKey: 51, keyDown: false)
+        for e in [down, up].compactMap({ $0 }) {
+            e.flags = .maskNonCoalesced
+            e.setIntegerValueField(.eventSourceUserData, value: Self.selfTag)
+        }
+        self.backspaceDown = down
+        self.backspaceUp = up
     }
 
     /// Updates the posting-behavior snapshot (`sendEachKeystroke`,
@@ -85,7 +118,6 @@ public final class EventTapController: @unchecked Sendable {
     private func createTap() {
         let mask: CGEventMask =
             (1 << CGEventType.keyDown.rawValue) |
-            (1 << CGEventType.keyUp.rawValue) |   // needed for the held-key echo guard
             (1 << CGEventType.flagsChanged.rawValue) |
             (1 << CGEventType.leftMouseDown.rawValue) |
             (1 << CGEventType.rightMouseDown.rawValue)
@@ -125,6 +157,12 @@ public final class EventTapController: @unchecked Sendable {
 
     fileprivate func handle(proxy: CGEventTapProxy, type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+            // Logging here does not violate spec §3's no-logging-on-the-hot-path
+            // rule: this branch fires a handful of times at most, never per
+            // keystroke, and a silently re-enabled tap hides a real signal.
+            tapDisableCount &+= 1
+            NSLog("Keystone: tap disabled (%@) #%d — re-enabling",
+                  type == .tapDisabledByTimeout ? "timeout" : "user input", tapDisableCount)
             if let p = tapPort { CGEvent.tapEnable(tap: p, enable: true) }
             return nil
         }
@@ -137,24 +175,21 @@ public final class EventTapController: @unchecked Sendable {
         }
         if type == .flagsChanged { return Unmanaged.passUnretained(event) }
 
-        let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
-
-        // A key-up marks the armed key as released — but we STAY armed, because
-        // the phantom repeat can arrive a little AFTER the release too.
-        if type == .keyUp {
-            echoGuard.onKeyUp(keyCode: keyCode)
-            return Unmanaged.passUnretained(event)
-        }
         guard type == .keyDown else { return Unmanaged.passUnretained(event) }
 
-        // Echo guard (EchoGuard.swift). Drops the OS phantom duplicate after a
-        // transform; forwards genuine held-key auto-repeats (autorepeat = true)
-        // so holding a key like Delete keeps acting on every repeat.
-        let isAutorepeat = event.getIntegerValueField(.keyboardEventAutorepeat) != 0
-        if echoGuard.onKeyDown(keyCode: keyCode, isAutorepeat: isAutorepeat) == .drop {
-            return nil
-        }
-
+        // NOTE: there is deliberately no duplicate-key filter here any more.
+        // Four generations of a timing-window "echo guard" lived at this spot and
+        // every one of them had to choose between letting the phantom through
+        // (task→tassk) and eating the user's REAL repeats — because a phantom and
+        // a genuine press are byte-identical (same keycode, autorepeat=0, own
+        // key-up). The version that shipped silently swallowed the second letter
+        // of ordinary English words whose doubled letter is also a Telex tone key
+        // (class, pass, miss, less, press, address, off), which the user
+        // experienced as "typing lags"; it also ate the second of two quick
+        // Delete taps. A visible doubled character is recoverable by the user, a
+        // silently eaten keystroke is not. OpenKey uses this same tap
+        // architecture with no filter at all, so the phantom is a divergence to
+        // find, not an OS law to filter around.
         let raw = makeRawKey(event)
         let (suppress, edit, _) = engine.handle(raw)
         if let edit {
@@ -162,10 +197,10 @@ public final class EventTapController: @unchecked Sendable {
             // passes through untouched) — acceptable on the hot path, same
             // cost class as EngineController's config lock.
             let b = behaviorLock.withLock { behavior }
-            let sink = TapSink(source: synthSource, proxy: proxy, textOnKeyDownOnly: b.textOnKeyDownOnly)
+            let sink = TapSink(source: synthSource, proxy: proxy,
+                               backspaceDown: backspaceDown, backspaceUp: backspaceUp,
+                               textOnKeyDownOnly: b.textOnKeyDownOnly)
             KeystrokeExecutor(sink: sink).execute(edit, eachGrapheme: b.sendEachKeystroke)
-            // Arm on a transformed key (one that emitted a Backspace).
-            echoGuard.armIfTransformed(keyCode: keyCode, emittedBackspace: edit.backspaceCount > 0)
         }
         return suppress ? nil : Unmanaged.passUnretained(event)
     }
@@ -197,6 +232,8 @@ private func keystoneTapCallback(proxy: CGEventTapProxy, type: CGEventType, even
 private struct TapSink: EventSink {
     let source: CGEventSource?
     let proxy: CGEventTapProxy
+    let backspaceDown: CGEvent?
+    let backspaceUp: CGEvent?
     /// "Sửa lỗi gợi ý" (`autoFixSuggestion`, default ON): when true, the
     /// Unicode string is set on the keyDown event only — the keyUp is posted
     /// bare — which is the documented remedy for browsers/Excel doubling
@@ -205,7 +242,10 @@ private struct TapSink: EventSink {
     let textOnKeyDownOnly: Bool
 
     func postBackspace(count: Int) {
-        for _ in 0..<count { post(virtualKey: 51, keyDown: true); post(virtualKey: 51, keyDown: false) }
+        // Re-post the ONE pre-built pair (OpenKey parity) instead of allocating a
+        // fresh CGEvent per backspace inside the tap callback.
+        guard let down = backspaceDown, let up = backspaceUp else { return }
+        for _ in 0..<count { down.tapPostEvent(proxy); up.tapPostEvent(proxy) }
     }
 
     func postText(_ text: String) {
@@ -224,17 +264,10 @@ private struct TapSink: EventSink {
             }
         }
         for e in [down, up] {
-            e.flags = []
+            e.flags = .maskNonCoalesced
             e.setIntegerValueField(.eventSourceUserData, value: EventTapController.selfTag)
             e.tapPostEvent(proxy)
         }
     }
 
-    private func post(virtualKey: CGKeyCode, keyDown: Bool) {
-        // Intentional silent drop (see postText): hot path, no per-keystroke logging.
-        guard let e = CGEvent(keyboardEventSource: source, virtualKey: virtualKey, keyDown: keyDown) else { return }
-        e.flags = []
-        e.setIntegerValueField(.eventSourceUserData, value: EventTapController.selfTag)
-        e.tapPostEvent(proxy)
-    }
 }

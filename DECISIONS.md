@@ -779,6 +779,51 @@ CGEvent-level wiring (reading `keyboardEventKeycode`/`keyboardEventAutorepeat`
 and calling `onKeyDown`/`onKeyUp`/`armIfTransformed`), but the drop/forward
 decision itself no longer needs a real event stream to test.
 
+**The echo guard is GONE, and the root-cause paragraph above is wrong.** The
+guard went through four generations (single-slot arm; 250ms window; 400ms
+drop-all; 500ms refreshing window) and every one of them had to choose between
+letting the phantom through and eating the user's real keystrokes — because a
+phantom and a genuine press are byte-identical: same keycode, `autorepeat=0`,
+its own key-up. The shipped version silently swallowed the second letter of
+ordinary English words whose doubled letter is also a Telex tone key (`class`,
+`pass`, `miss`, `less`, `press`, `address`, `off`), which the user experienced
+as "typing lags"; it also ate the second of two quick Delete taps. **A visible
+doubled character is recoverable by the user; a silently eaten keystroke is
+not.** So the filter is deleted, along with `EchoGuard.swift` and its tests.
+
+What live experiments on the user's Mac then ELIMINATED, so nobody re-treads it:
+
+- **Not a tap timeout.** The tap-disabled branch was silently re-enabling with
+  no log, which would have hidden exactly this. Instrumented and counted: zero
+  events while reproducing the bug.
+- **Not the suppression.** This file used to claim the phantom is caused by
+  returning nil for the key-down. It cannot be: at the commit where that log was
+  taken, plain letters were suppressed too (`suppress = !noop`, and `rerender()`
+  returns non-empty text for every appended letter) and plain letters never once
+  doubled.
+- **Not real-keycode injection in general.** Control experiment: an inert
+  keycode-106 (F16) down/up pair posted on the plain-letter path. Plain letters
+  still did not double.
+- **Not OpenKey divergence.** Matching OpenKey exactly — `.maskNonCoalesced`
+  instead of `flags = []`, and one pre-created Backspace pair re-posted forever
+  instead of two fresh CGEvents per backspace — changed nothing. (Both were kept
+  anyway: they are strictly better, and they are why deleting now feels smooth.)
+- **Not local-event suppression.** Posting a synthetic event suppresses real
+  hardware events for 0.25s by default, the same order as the phantom's delay.
+  Zeroing `localEventsSuppressionInterval` and permitting all local events
+  during suppression changed nothing.
+
+The duplicate remains, bound specifically to the Backspace-emitting path. The
+conclusion is architectural: a CGEventTap is not the right API for an input
+method — it suppresses keys behind the OS's back, so there is always something
+that can be re-delivered. **InputMethodKit** consumes a key by contract
+(`IMKInputController.handle(_:client:) -> Bool`), which removes this failure
+mode by construction, along with `backspaceCount` on the output path, the
+`sendEachKeystroke` / `textOnKeyDownOnly` app-compat knobs, and the
+secure-input limitation. `KeystoneEngine`, `KeyTranslator` and
+`EngineController` are unaffected — `EventSink` is already the seam. The tap is
+kept as a fallback mode rather than deleted.
+
 ## `restoreIfInvalid` back ON (after the duplicate-key-down fix)
 
 `AppModel.restoreIfInvalid` defaults **true** ("Tự khôi phục phím với từ sai") —
