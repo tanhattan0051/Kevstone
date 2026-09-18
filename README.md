@@ -15,7 +15,7 @@ diệt tận gốc lỗi kinh điển *"đang gõ tự nhiên mất tiếng Vi�
 ![Swift](https://img.shields.io/badge/Swift-6.0-F05138?logo=swift&logoColor=white)
 ![UI](https://img.shields.io/badge/UI-SwiftUI-1575F9)
 ![Tests](https://img.shields.io/badge/tests-154%20·%20251%20ca%20corpus-brightgreen)
-![License](https://img.shields.io/badge/License-PolyForm%20Noncommercial-orange)
+![License](https://img.shields.io/badge/License-GPLv3-blue)
 [![CI](https://github.com/tanhattan0051/Kevstone/actions/workflows/ci.yml/badge.svg)](https://github.com/tanhattan0051/Kevstone/actions/workflows/ci.yml)
 
 [Vì sao Keystone](#vì-sao-keystone) ·
@@ -194,10 +194,11 @@ ngược cho TCVN3 / VNI-Windows · bộ kiểm tra bản mới thật (Sparkle)
 
 ## Giấy phép
 
-Keystone dùng **giấy phép kép (dual-license)**:
+Keystone là **phần mềm tự do**, phát hành dưới **[GNU General Public License v3.0](LICENSE)** (GPLv3) — cùng giấy phép với [OpenKey](https://github.com/tuyenvm/OpenKey).
 
-- 🆓 **Phi thương mại — miễn phí:** [PolyForm Noncommercial License 1.0.0](https://polyformproject.org/licenses/noncommercial/1.0.0) — cá nhân, học tập, nghiên cứu, dự án phi lợi nhuận được dùng, sửa và chia sẻ thoải mái. Xem [`LICENSE`](LICENSE).
-- 💼 **Thương mại:** mọi mục đích kinh doanh cần **giấy phép thương mại riêng** — liên hệ **tanhattan0051@gmail.com** để mua.
+Bạn được tự do dùng, nghiên cứu, sửa đổi và chia sẻ Keystone (kể cả cho mục đích thương mại). Điều kiện: mọi bản phân phối — kể cả bản đã sửa — phải **giữ nguyên mã nguồn mở dưới cùng giấy phép GPLv3**. Xem đầy đủ ở [`LICENSE`](LICENSE).
+
+Copyright © 2026 **Tân Tạ**.
 
 Bản quyền © 2026 **Tạ Nhật Tân**.
 
