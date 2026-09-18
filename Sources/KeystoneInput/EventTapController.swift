@@ -41,6 +41,18 @@ public final class EventTapController: @unchecked Sendable {
     private let behaviorLock = OSAllocatedUnfairLock()
     private var behavior = InputBehavior()
 
+    // Held-key echo guard. On this Mac (PressAndHold off, fast key-repeat),
+    // briefly holding a key repeats it. Because we SUPPRESS the initial key-down
+    // of a key we transform, macOS delivers that repeat mis-flagged as a fresh
+    // key-down (auto-repeat = false) ~100-200ms later — a duplicate that
+    // corrupts the word (task→tassk, mà→m). A physical key cannot be pressed
+    // twice without a key-up in between, so ANY key-down for a key that is still
+    // held (its key-up hasn't arrived) is a repeat, never a new press. We arm on
+    // a transformed key (one that emitted a Backspace) and drop its held
+    // repeats until its key-up disarms us. Only ever touched on the tap thread.
+    private var heldTransformKey: Int64 = -1
+    private var armedReleased = false   // has the armed key's key-up arrived?
+
     public init(engine: EngineController) {
         self.engine = engine
         self.synthSource = CGEventSource(stateID: .privateState)
@@ -81,6 +93,7 @@ public final class EventTapController: @unchecked Sendable {
     private func createTap() {
         let mask: CGEventMask =
             (1 << CGEventType.keyDown.rawValue) |
+            (1 << CGEventType.keyUp.rawValue) |   // needed for the held-key echo guard
             (1 << CGEventType.flagsChanged.rawValue) |
             (1 << CGEventType.leftMouseDown.rawValue) |
             (1 << CGEventType.rightMouseDown.rawValue)
@@ -131,7 +144,31 @@ public final class EventTapController: @unchecked Sendable {
             return Unmanaged.passUnretained(event)
         }
         if type == .flagsChanged { return Unmanaged.passUnretained(event) }
+
+        let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
+
+        // A key-up marks the armed key as released — but we STAY armed, because
+        // the phantom repeat can arrive a little AFTER the release too.
+        if type == .keyUp {
+            if keyCode == heldTransformKey { armedReleased = true }
+            return Unmanaged.passUnretained(event)
+        }
         guard type == .keyDown else { return Unmanaged.passUnretained(event) }
+
+        // Echo guard. After transforming a key, the OS delivers a spurious
+        // duplicate key-down of that same key — either while it is still held
+        // (a mis-flagged repeat) or shortly AFTER its key-up (a phantom press).
+        // Dropping exactly one such duplicate restores the user's real
+        // keystrokes; the engine's own double-key handling then does the right
+        // thing (task→task, ass→as, boss→boss via restore) regardless of which
+        // of the identical presses we removed. We drop held repeats until the
+        // key is released, then drop one post-release phantom and disarm.
+        if keyCode == heldTransformKey {
+            let releasedNow = armedReleased
+            if releasedNow { heldTransformKey = -1; armedReleased = false }
+            return nil
+        }
+        heldTransformKey = -1; armedReleased = false   // any other key ends the window
 
         let raw = makeRawKey(event)
         let (suppress, edit, _) = engine.handle(raw)
@@ -140,22 +177,12 @@ public final class EventTapController: @unchecked Sendable {
             // passes through untouched) — acceptable on the hot path, same
             // cost class as EngineController's config lock.
             let b = behaviorLock.withLock { behavior }
-            // Post the synthetic backspaces/text AFTER this callback returns,
-            // not during it. Injecting key events (via CGEventPost) while we
-            // return nil to suppress the physical key makes the window server
-            // re-deliver that physical key to our tap — a duplicate key-down
-            // that corrupts the word (a Telex tone key seen twice: task→tassk,
-            // cài→cafi). Scheduling the injection on the tap's own run loop
-            // runs it once this callback has returned and the suppression has
-            // settled, so no echo is generated. Same thread, so ordering with
-            // the next keystroke is preserved.
-            let src = synthSource
-            if let rl = tapRunLoop {
-                CFRunLoopPerformBlock(rl, CFRunLoopMode.commonModes.rawValue) {
-                    let sink = TapSink(source: src, textOnKeyDownOnly: b.textOnKeyDownOnly)
-                    KeystrokeExecutor(sink: sink).execute(edit, eachGrapheme: b.sendEachKeystroke)
-                }
-                CFRunLoopWakeUp(rl)
+            let sink = TapSink(source: synthSource, proxy: proxy, textOnKeyDownOnly: b.textOnKeyDownOnly)
+            KeystrokeExecutor(sink: sink).execute(edit, eachGrapheme: b.sendEachKeystroke)
+            // Arm on a transformed key (one that emitted a Backspace).
+            if edit.backspaceCount > 0 {
+                heldTransformKey = keyCode
+                armedReleased = false
             }
         }
         return suppress ? nil : Unmanaged.passUnretained(event)
@@ -187,6 +214,7 @@ private func keystoneTapCallback(proxy: CGEventTapProxy, type: CGEventType, even
 
 private struct TapSink: EventSink {
     let source: CGEventSource?
+    let proxy: CGEventTapProxy
     /// "Sửa lỗi gợi ý" (`autoFixSuggestion`, default ON): when true, the
     /// Unicode string is set on the keyDown event only — the keyUp is posted
     /// bare — which is the documented remedy for browsers/Excel doubling
@@ -216,15 +244,7 @@ private struct TapSink: EventSink {
         for e in [down, up] {
             e.flags = []
             e.setIntegerValueField(.eventSourceUserData, value: EventTapController.selfTag)
-            // Post via CGEventPost, NOT tapPostEvent(proxy): injecting a
-            // synthetic key event through the tap proxy from inside the keyDown
-            // callback (while we suppress the physical key) makes the window
-            // server re-deliver that physical key to our tap — a duplicate
-            // key-down that corrupts the composing word (e.g. a Telex tone key
-            // seen twice: `task`→`tassk`). CGEventPost re-enters the session tap
-            // instead, where the `selfTag` guard drops our own events, so there
-            // is no re-delivery. See DECISIONS.md "Duplicate key-down".
-            e.post(tap: .cgSessionEventTap)
+            e.tapPostEvent(proxy)
         }
     }
 
@@ -233,6 +253,6 @@ private struct TapSink: EventSink {
         guard let e = CGEvent(keyboardEventSource: source, virtualKey: virtualKey, keyDown: keyDown) else { return }
         e.flags = []
         e.setIntegerValueField(.eventSourceUserData, value: EventTapController.selfTag)
-        e.post(tap: .cgSessionEventTap)   // see postText: CGEventPost, not tapPostEvent(proxy)
+        e.tapPostEvent(proxy)
     }
 }
