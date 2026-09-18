@@ -759,6 +759,26 @@ is integration-only (needs a real key stream), so it is not unit-tested; the
 pure engine keeps composing whatever keys survive the guard. Synthetic events
 still post via `tapPostEvent(proxy)` as before (OpenKey does the same).
 
+**Follow-up bug: holding Delete deleted only one character.** The guard above
+armed on ANY key whose transform emitted a Backspace — and Delete, while a
+word is composing, does exactly that. So the very key-down that armed the
+guard was Delete's own, and every subsequent Delete key-down while held (the
+user's genuine OS auto-repeats, not phantoms) matched `armedKey` and was
+dropped, not just the one phantom. Holding Delete stopped after a single
+character. The fix distinguishes the two cases using the OS autorepeat flag
+CGEvent already carries: a phantom duplicate always arrives with
+`autorepeat = false` (same as the original press), while a genuine held-key
+repeat arrives with `autorepeat = true`. The guard now drops only
+non-autorepeat key-downs of the armed key and forwards autorepeat ones, so
+holding Delete (or any other transformed key) keeps acting on every repeat
+while the single-phantom-after-a-transform case is still caught. The state
+machine itself was extracted out of `EventTapController` into a pure,
+unit-testable `EchoGuard` (`Sources/KeystoneInput/EchoGuard.swift`,
+`Tests/KeystoneInputTests/EchoGuardTests.swift`) — the tap still does the
+CGEvent-level wiring (reading `keyboardEventKeycode`/`keyboardEventAutorepeat`
+and calling `onKeyDown`/`onKeyUp`/`armIfTransformed`), but the drop/forward
+decision itself no longer needs a real event stream to test.
+
 ## `restoreIfInvalid` back ON (after the duplicate-key-down fix)
 
 `AppModel.restoreIfInvalid` defaults **true** ("Tự khôi phục phím với từ sai") —

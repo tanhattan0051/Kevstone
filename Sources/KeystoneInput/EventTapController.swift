@@ -41,17 +41,9 @@ public final class EventTapController: @unchecked Sendable {
     private let behaviorLock = OSAllocatedUnfairLock()
     private var behavior = InputBehavior()
 
-    // Held-key echo guard. On this Mac (PressAndHold off, fast key-repeat),
-    // briefly holding a key repeats it. Because we SUPPRESS the initial key-down
-    // of a key we transform, macOS delivers that repeat mis-flagged as a fresh
-    // key-down (auto-repeat = false) ~100-200ms later — a duplicate that
-    // corrupts the word (task→tassk, mà→m). A physical key cannot be pressed
-    // twice without a key-up in between, so ANY key-down for a key that is still
-    // held (its key-up hasn't arrived) is a repeat, never a new press. We arm on
-    // a transformed key (one that emitted a Backspace) and drop its held
-    // repeats until its key-up disarms us. Only ever touched on the tap thread.
-    private var heldTransformKey: Int64 = -1
-    private var armedReleased = false   // has the armed key's key-up arrived?
+    // Held-key echo guard state machine — see EchoGuard.swift. Only ever
+    // touched on the tap thread.
+    private var echoGuard = EchoGuard()
 
     public init(engine: EngineController) {
         self.engine = engine
@@ -150,25 +142,18 @@ public final class EventTapController: @unchecked Sendable {
         // A key-up marks the armed key as released — but we STAY armed, because
         // the phantom repeat can arrive a little AFTER the release too.
         if type == .keyUp {
-            if keyCode == heldTransformKey { armedReleased = true }
+            echoGuard.onKeyUp(keyCode: keyCode)
             return Unmanaged.passUnretained(event)
         }
         guard type == .keyDown else { return Unmanaged.passUnretained(event) }
 
-        // Echo guard. After transforming a key, the OS delivers a spurious
-        // duplicate key-down of that same key — either while it is still held
-        // (a mis-flagged repeat) or shortly AFTER its key-up (a phantom press).
-        // Dropping exactly one such duplicate restores the user's real
-        // keystrokes; the engine's own double-key handling then does the right
-        // thing (task→task, ass→as, boss→boss via restore) regardless of which
-        // of the identical presses we removed. We drop held repeats until the
-        // key is released, then drop one post-release phantom and disarm.
-        if keyCode == heldTransformKey {
-            let releasedNow = armedReleased
-            if releasedNow { heldTransformKey = -1; armedReleased = false }
+        // Echo guard (EchoGuard.swift). Drops the OS phantom duplicate after a
+        // transform; forwards genuine held-key auto-repeats (autorepeat = true)
+        // so holding a key like Delete keeps acting on every repeat.
+        let isAutorepeat = event.getIntegerValueField(.keyboardEventAutorepeat) != 0
+        if echoGuard.onKeyDown(keyCode: keyCode, isAutorepeat: isAutorepeat) == .drop {
             return nil
         }
-        heldTransformKey = -1; armedReleased = false   // any other key ends the window
 
         let raw = makeRawKey(event)
         let (suppress, edit, _) = engine.handle(raw)
@@ -180,10 +165,7 @@ public final class EventTapController: @unchecked Sendable {
             let sink = TapSink(source: synthSource, proxy: proxy, textOnKeyDownOnly: b.textOnKeyDownOnly)
             KeystrokeExecutor(sink: sink).execute(edit, eachGrapheme: b.sendEachKeystroke)
             // Arm on a transformed key (one that emitted a Backspace).
-            if edit.backspaceCount > 0 {
-                heldTransformKey = keyCode
-                armedReleased = false
-            }
+            echoGuard.armIfTransformed(keyCode: keyCode, emittedBackspace: edit.backspaceCount > 0)
         }
         return suppress ? nil : Unmanaged.passUnretained(event)
     }
