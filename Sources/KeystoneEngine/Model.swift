@@ -147,6 +147,25 @@ public struct EngineConfig: Sendable, Equatable, Codable {
     /// false keeps the corpus and English-word protection exactly as today.
     /// See DECISIONS.md "Bỏ dấu ở cuối từ / freeMarkAcrossCoda (Phase 4)".
     public var freeMarkAcrossCoda: Bool
+    /// "Huỷ dấu xong thì gõ tiếp chữ thường" (Phase 6, OpenKey-compatible
+    /// cancel semantics). Off by default. A Telex/VNI tone or quality-mark
+    /// CANCEL is the standard same-key double-strike (Telex ss/ff/rr/xx/jj
+    /// tones; aa/ee/oo circumflex, dd's đ-stroke, w's horn/breve — all the
+    /// existing double-strike "undo" branches in `Telex.fold`/`VNI.fold`; VNI
+    /// digits 1-5 tones and 6/7/8/9 marks the same way). `z` (tone-clear) is
+    /// NOT a cancel here — unlike the keys above it doesn't double a letter
+    /// to undo anything, it just clears the tone outright (see DECISIONS.md
+    /// "`z` key semantics"), so typing `z` never enters this mode. When
+    /// `literalAfterCancel` is true, once a cancel fires anywhere in the
+    /// composing word, EVERY LATER key of that same word is taken completely
+    /// literally — no tone, no quality mark, no quick-telex/quick-consonant
+    /// transform — until the word boundary. This mirrors OpenKey's
+    /// `tempDisableKey` (see DECISIONS.md "OpenKey-compatible
+    /// literal-after-cancel (Phase 6)"). Default false keeps the corpus and
+    /// every existing Telex/VNI test byte-identical; only later keys within
+    /// the SAME word after a cancel are affected — everything before the
+    /// cancel is unchanged either way.
+    public var literalAfterCancel: Bool
 
     public init(
         inputMethod: InputMethod = .telex,
@@ -162,7 +181,8 @@ public struct EngineConfig: Sendable, Equatable, Codable {
         quickEndConsonant: Bool = false,
         autoCapitalize: Bool = false,
         allowFreeToneMark: Bool = true,
-        freeMarkAcrossCoda: Bool = false
+        freeMarkAcrossCoda: Bool = false,
+        literalAfterCancel: Bool = false
     ) {
         self.inputMethod = inputMethod
         self.codeTable = codeTable
@@ -178,6 +198,7 @@ public struct EngineConfig: Sendable, Equatable, Codable {
         self.autoCapitalize = autoCapitalize
         self.allowFreeToneMark = allowFreeToneMark
         self.freeMarkAcrossCoda = freeMarkAcrossCoda
+        self.literalAfterCancel = literalAfterCancel
     }
 }
 

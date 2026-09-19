@@ -80,6 +80,20 @@ enum SyllableOps {
         return String(letters)
     }
 
+    /// The cell a key produces when Telex/VNI transforms are suppressed (see
+    /// `EngineConfig.literalAfterCancel`): a vowel letter (a/e/i/o/u/y)
+    /// becomes a plain, unmarked vowel cell; everything else (consonants,
+    /// VNI's digit keys, Telex's `[`/`]` direct keys) becomes a plain
+    /// consonant-slot cell holding that character verbatim. This is exactly
+    /// what every existing double-strike "literal" branch in
+    /// `Telex.fold`/`VNI.fold` already builds by hand for the cancelling
+    /// keystroke itself; `literalAfterCancel` reuses it for every keystroke
+    /// AFTER the cancel too.
+    static func literalCell(_ lo: Character, upper: Bool) -> Cell {
+        if let bv = BaseVowel(lo) { return .vowel(bv, .none, upper: upper) }
+        return .cons(lo, upper: upper)
+    }
+
     /// At most one quality-marked vowel, unless they form the ươ pair.
     static func marksLegal(_ cells: [Cell]) -> Bool {
         let marked = cells.enumerated().filter { $0.element.isVowel && $0.element.mark != .none }

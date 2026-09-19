@@ -21,16 +21,31 @@ enum VNI {
     private static let tones: [Character: Tone] = ["1": .sac, "2": .huyen, "3": .hoi, "4": .nga, "5": .nang]
 
     static func fold(_ keys: [Character], allowFreeToneMark: Bool = true,
-                      freeMarkAcrossCoda: Bool = false) -> Composition {
+                      freeMarkAcrossCoda: Bool = false,
+                      literalAfterCancel: Bool = false) -> Composition {
         var cells: [Cell] = []
         var tone: Tone = .ngang
         var prevChar: Character = " "
         var prevEffect: Effect = .start
+        // See Telex.fold's matching comment: `Effect.literal` is exactly (and
+        // only) what every digit double-strike cancel below already returns,
+        // so it doubles as the "a cancel just fired" signal `literalAfterCancel`
+        // needs, with no separate bookkeeping. `cancelled` is a plain local,
+        // recomputed from `keys` on every call, so backspacing past the
+        // cancelling digit naturally drops back out of literal mode.
+        var cancelled = false
         for ch in keys {
             let up = ch.isUppercase
             let lo = Character(ch.lowercased())
-            let e = apply(lo, upper: up, prevChar: prevChar, prevEffect: prevEffect, cells: &cells, tone: &tone,
+            let e: Effect
+            if literalAfterCancel && cancelled {
+                cells.append(SyllableOps.literalCell(lo, upper: up))
+                e = .literal
+            } else {
+                e = apply(lo, upper: up, prevChar: prevChar, prevEffect: prevEffect, cells: &cells, tone: &tone,
                           allowFreeToneMark: allowFreeToneMark, freeMarkAcrossCoda: freeMarkAcrossCoda)
+                if literalAfterCancel && e == .literal { cancelled = true }
+            }
             prevChar = lo; prevEffect = e
         }
         return Composition(cells: cells, tone: tone)

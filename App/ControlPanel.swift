@@ -86,6 +86,10 @@ private struct BasicPane: View {
                 Text("Khi phím thô có ký tự lặp do bấm huỷ dấu (tassk), giữ chữ đang hiện nếu đó mới là từ thật (task). Cần bật “Tự khôi phục phím với từ sai”.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                Toggle("Huỷ dấu xong thì gõ tiếp chữ thường (như OpenKey)", isOn: $model.literalAfterCancel)
+                Text("Bấm huỷ dấu xong (ví dụ bấm s lần nữa sau khi đã huỷ), các chữ gõ tiếp theo trong từ đó sẽ là chữ thường, không lên dấu nữa — classs→class, tassk→task.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 Toggle("Đặt dấu oà, uý (thay vì òa, úy)", isOn: $model.useClassicToneMarks)
                 Toggle("Gõ nhanh (cc=ch, gg=gi, kk=kh, nn=ng, qq=qu, pp=ph, tt=th)",
                        isOn: $model.quickTelex)

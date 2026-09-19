@@ -80,6 +80,11 @@ Cùng với **self-tag** chống xử lý lại chính event mình sinh ra, **kh
   công tắc riêng **"Giữ từ tiếng Anh đang hiển thị (dùng từ điển)"** *(mặc định bật, cần bật cùng "Tự
   khôi phục phím với từ sai")* trong Bảng điều khiển để tắt hẳn việc dùng từ điển nếu cần — từ điển chỉ
   được nạp (và giải phóng bộ nhớ khi tắt) lúc cả hai công tắc đều bật.
+- **Huỷ dấu xong thì gõ tiếp chữ thường (kiểu OpenKey)** *(mặc định bật):* gõ đè phím dấu lần nữa sau
+  khi đã huỷ (`c l a s s s` → OpenKey huỷ ở `s` thứ 3), các chữ gõ tiếp theo trong từ đó sẽ là chữ
+  thường hoàn toàn — không còn lên dấu/thanh hay biến đổi gõ nhanh nữa — cho tới hết từ:
+  `classs → class`, `tassk → task`. Công tắc riêng **"Huỷ dấu xong thì gõ tiếp chữ thường (như
+  OpenKey)"** trong Bảng điều khiển; xem DECISIONS.md "OpenKey-compatible literal-after-cancel".
 - **Khôi phục dấu qua Backspace:** buffer được dựng lại từ phím thô sau mỗi lần gõ (kể cả xoá), nên
   xoá một ký tự dấu rồi gõ lại luôn đúng. Có cả **double-strike undo** (gõ lại phím thanh lần hai để
   bỏ dấu và trả ra ký tự thô).

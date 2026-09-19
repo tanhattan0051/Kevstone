@@ -1211,3 +1211,105 @@ lexicon installed. All were RED against the fixed harness and the
 pre-fix `EngineController`; all are GREEN after the fix, alongside the full
 pre-existing suite (`KeystoneEngineTests`: 132/132 unaffected — this bug
 lives entirely in `EngineController`, not `Engine`).
+
+## OpenKey-compatible literal-after-cancel (Phase 6)
+
+The author types English inside Vietnamese Telex mode with the OpenKey
+habit: press the tone/mark key twice to cancel it, then keep typing — and
+expects what's on screen to be the literal result, e.g. `classs` (the
+natural double `s` of "class", plus one more `s` pressed on purpose once the
+toggle is seen) → `class`. Keystone instead re-derives the whole word from
+`rawKeys` on every keystroke (`Telex.fold`/`VNI.fold`, see `Engine.swift`'s
+header), so a THIRD press of the same key was, before this feature, treated
+exactly like a first press: it re-applied the tone/mark instead of staying
+literal (`classs` composed to `clás`, not `class`), and — because a tone
+mark makes the composed word non-ASCII — the existing lexicon-restore
+(`Lexicon.swift`, see "Restore chooses the composed word when it is the real
+one" above) couldn't rescue it either, so the raw keystrokes (`classs`, one
+letter too many) won.
+
+**Reference: OpenKey's `tempDisableKey`**
+(`/Users/tanta/Downloads/OpenKey/Sources/OpenKey/engine/Engine.cpp`).
+OpenKey sets a single `static bool tempDisableKey` to `true` inside every
+mark/tone double-strike-undo branch — `insertMark` (~line 789, tone/quality
+marks), `insertD` (~line 819, đ-stroke), `insertAOE` (~line 854, circumflex/
+breve keys typed as their own vowel letters) and `insertW` (~lines 896, 922,
+966, the `w`/`[`/`]` horn family) — and clears it only at the next
+`startNewSession()` (a word boundary). The dispatcher then reads it
+unconditionally: `if (!IS_SPECIALKEY(data) || tempDisableKey) { ... insert
+data as a plain key ... }` (~line 1486) — once the flag is set, EVERY later
+key of the word, special or not, is inserted as a literal character instead
+of running through `handleMainKey`'s Vietnamese transforms.
+
+**Keystone's `cancelled` local mirrors this exactly, without any new mutable
+state.** Every double-strike "undo" branch in `Telex.fold`/`VNI.fold`
+already returns the private `Effect.literal` case — and, checked directly
+against both files, `.literal` is returned from NO other branch. So
+`.literal` already *is* "a cancel just fired" with no new bookkeeping
+needed: `fold`'s loop keeps a plain local `var cancelled = false`, flips it
+to `true` the first time `apply(...)` returns `.literal` (only when
+`literalAfterCancel` is on), and from then on skips `apply` entirely for the
+rest of that `fold` call — each later key is appended verbatim via
+`SyllableOps.literalCell` (a vowel letter → a plain unmarked vowel cell,
+anything else → a plain consonant-slot cell holding that character), the
+same shape every existing "literal" branch already builds by hand. Because
+`cancelled` is local to one `fold` call and `fold` always re-derives the
+whole word from `rawKeys` from scratch (never incrementally), backspacing
+past the cancelling keystroke drops `literalAfterCancel` back to inert with
+no special-case code — `LiteralAfterCancelBackspacePastCancelResetsTests`
+pins this. `z` (tone-clear) is deliberately NOT a cancel trigger: it clears
+the tone outright without doubling a letter to undo anything (see "`z` key
+semantics" above; OpenKey's own `removeMark()`, the `z` handler, never
+touches `tempDisableKey` either), so typing `z` never enters literal mode.
+
+**How it composes with the lexicon restore.** `literalAfterCancel` only
+changes what gets COMPOSED; `RestoreDecision` (see above) is unchanged and
+still runs afterward. For a word like `classs`, the flag alone (even with
+`restoreIfInvalid` off and no lexicon) already composes the right spelling
+character-for-character, because every key after the cancel is now literal:
+`class` — nothing left to restore. For a word like `tassk`, the flag makes
+no difference at all, because the character after the cancel (`k`) was
+never a Telex transform key to begin with; that case was already fixed by
+`RestoreDecision` alone. The two features are independent and additive:
+either can fix a given cancel-habit word depending on what follows the
+cancel keystroke, and both stacked (the shipped app default) fix the whole
+nine-row table from the design spec.
+
+**Trade-off, accepted on purpose.** The OLD toggle behavior (no
+`literalAfterCancel`) re-applies the tone/mark on every odd-numbered repeat
+of the key, so four presses of a cancel key round-trip back to "off" with no
+extra letter (`asss` s×4 composes to `ass`, tone ngang). With
+`literalAfterCancel` on, only the SECOND press is a cancel; the third and
+fourth are both literal, so four presses leave an extra letter behind
+(`asss` s×4 composes to `asss`, one more `s` than the old toggle). This
+matches OpenKey's own behavior (`tempDisableKey` stays latched until the
+word boundary, it does not re-arm on a further double-strike), and is the
+deliberate cost of "cancel means cancel, permanently, for this word" instead
+of "cancel toggles."
+
+**Dormant-at-engine / on-by-default-in-the-app, the same pattern as
+`freeMarkAcrossCoda`.** `EngineConfig.literalAfterCancel` defaults `false` —
+with it off, `Telex.fold`/`VNI.fold`'s `cancelled` local is never allowed to
+suppress anything, so every existing corpus/toggle test is byte-identical
+(pinned by `LiteralAfterCancelUnchangedBeforeTheCancelTests` and the
+~60-word Vietnamese regression suite in `LiteralAfterCancelVietnameseUnchanged`).
+`AppModel.literalAfterCancel` defaults **true** (Control Panel: "Huỷ dấu
+xong thì gõ tiếp chữ thường (như OpenKey)", next to the lexicon-restore
+toggle) and is pushed through `pushConfig()`/reset by `resetToDefaults()`
+like every other mapped toggle.
+
+**Natural-typing sweep.** A throwaway scratch executable (not part of the
+repo) loaded the real system lexicon (`LexiconLoader.load()`) and typed
+every lowercase-alphabetic word in `/usr/share/dict/words` (210,773 words
+after filtering) straight through `Engine`, character by character, with
+`restoreIfInvalid` + `freeMarkAcrossCoda` + the lexicon all on, comparing
+`literalAfterCancel` off vs. on. Zero words differed. This is expected, not
+a coincidence: the flag can only change anything once a cancel has already
+fired, and a cancel only fires on a key that repeats the immediately
+preceding tone/mark key past what the word's own natural spelling requires
+— natural dictionary typing (one keystroke per letter, no deliberate extra
+press) essentially never produces that shape. The rare real words containing
+three consecutive Telex-special letters (`bossship`, `whenceeer`, …) still
+commit identically either way, because the flag only ever changes the
+COMPOSED intermediate shape, and both paths converge on the same final
+lexicon-restore decision.

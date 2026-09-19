@@ -8,7 +8,8 @@
 //  - The "mapped" group (inputMethod, codeTable, orthography, quickTelex,
 //    restoreIfInvalid, macrosEnabled, macrosExpandWhenVietnameseOff,
 //    macroAutoCapitalize, quickStartConsonant, quickEndConsonant,
-//    autoCapitalize, allowFreeToneMark, freeMarkAcrossCoda) is pushed into
+//    autoCapitalize, allowFreeToneMark, freeMarkAcrossCoda,
+//    literalAfterCancel) is pushed into
 //    `EngineConfig` on every change and reaches the running tap via
 //    `EngineController.updateConfig`.
 //  - Everything else is scaffolding: real UI, real persistence, but no
@@ -207,6 +208,24 @@ final class AppModel {
     var freeMarkAcrossCoda: Bool = AppModel.loadBool(Keys.freeMarkAcrossCoda, default: true) {
         didSet {
             UserDefaults.standard.set(freeMarkAcrossCoda, forKey: Keys.freeMarkAcrossCoda)
+            pushConfig()
+        }
+    }
+
+    /// "Huỷ dấu xong thì gõ tiếp chữ thường" (Phase 6, OpenKey-compatible
+    /// cancel semantics) — see DECISIONS.md "OpenKey-compatible
+    /// literal-after-cancel (Phase 6)". Once the standard Telex/VNI same-key
+    /// double-strike CANCELS a tone/mark, every later key of that word types
+    /// literally instead of toggling the transform back on.
+    ///
+    /// Default **ON**: matches the author's OpenKey habit (press the tone/
+    /// mark key twice to cancel, then keep typing — `classs`→class,
+    /// `tassk`→task). `EngineConfig` still defaults it false so the engine/
+    /// test level stays untouched until the app turns it on, same pattern as
+    /// `freeMarkAcrossCoda`.
+    var literalAfterCancel: Bool = AppModel.loadBool(Keys.literalAfterCancel, default: true) {
+        didSet {
+            UserDefaults.standard.set(literalAfterCancel, forKey: Keys.literalAfterCancel)
             pushConfig()
         }
     }
@@ -628,6 +647,7 @@ final class AppModel {
         spellCheck = true
         allowFreeToneMark = true
         freeMarkAcrossCoda = true
+        literalAfterCancel = true
         autoCapitalize = false
         quickStartConsonant = false
         quickEndConsonant = false
@@ -761,7 +781,8 @@ final class AppModel {
             quickEndConsonant: quickEndConsonant,
             autoCapitalize: autoCapitalize,
             allowFreeToneMark: allowFreeToneMark,
-            freeMarkAcrossCoda: freeMarkAcrossCoda
+            freeMarkAcrossCoda: freeMarkAcrossCoda,
+            literalAfterCancel: literalAfterCancel
         ))
     }
 
@@ -804,6 +825,7 @@ final class AppModel {
         static let spellCheck = "settings.spellCheck"
         static let allowFreeToneMark = "settings.allowFreeToneMark"
         static let freeMarkAcrossCoda = "settings.freeMarkAcrossCoda"
+        static let literalAfterCancel = "settings.literalAfterCancel"
         static let autoCapitalize = "settings.autoCapitalize"
         static let quickStartConsonant = "settings.quickStartConsonant"
         static let quickEndConsonant = "settings.quickEndConsonant"

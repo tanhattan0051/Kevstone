@@ -50,23 +50,41 @@ enum Telex {
     static func fold(
         _ keys: [Character], quickTelex: Bool = false,
         quickStartConsonant: Bool = false, quickEndConsonant: Bool = false,
-        allowFreeToneMark: Bool = true, freeMarkAcrossCoda: Bool = false
+        allowFreeToneMark: Bool = true, freeMarkAcrossCoda: Bool = false,
+        literalAfterCancel: Bool = false
     ) -> Composition {
         var cells: [Cell] = []
         var tone: Tone = .ngang
         var prevChar: Character = " "
         var prevEffect: Effect = .start
+        // `literalAfterCancel` (OpenKey-compatible cancel semantics, see
+        // DECISIONS.md): once a same-key double-strike CANCELS a tone/mark
+        // (`Effect.literal` — the same signal every existing double-strike
+        // "undo" branch already returns, and only those branches), every
+        // LATER key of this word bypasses `apply` entirely and is taken
+        // literally. `cancelled` is a plain local — re-derived from `keys`
+        // on every fold call like everything else here — so backspacing past
+        // the cancelling keystroke naturally re-folds without it (see
+        // `Engine.rerender`).
+        var cancelled = false
 
         for ch in keys {
             let up = ch.isUppercase
             let lo = Character(ch.lowercased())
-            let effect = apply(lo, upper: up, prevChar: prevChar,
+            let effect: Effect
+            if literalAfterCancel && cancelled {
+                cells.append(SyllableOps.literalCell(lo, upper: up))
+                effect = .literal
+            } else {
+                effect = apply(lo, upper: up, prevChar: prevChar,
                                prevEffect: prevEffect, cells: &cells, tone: &tone,
                                quickTelex: quickTelex,
                                quickStartConsonant: quickStartConsonant,
                                quickEndConsonant: quickEndConsonant,
                                allowFreeToneMark: allowFreeToneMark,
                                freeMarkAcrossCoda: freeMarkAcrossCoda)
+                if literalAfterCancel && effect == .literal { cancelled = true }
+            }
             prevChar = lo
             prevEffect = effect
         }
