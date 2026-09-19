@@ -47,11 +47,10 @@ public final class EventTapController: @unchecked Sendable {
     /// "the tap timed out and the OS re-delivered the key". Tap thread only.
     private var tapDisableCount = 0
 
-    /// The synthetic Backspace pair, created ONCE and re-posted forever.
-    /// OpenKey — same tap architecture, no phantom echo — does exactly this;
-    /// Keystone used to allocate two fresh CGEvents per backspace on the tap hot
-    /// path, which is the last material divergence from that reference and also
-    /// the reason an English word revert cost 2N allocations inside one callback.
+    /// The synthetic Backspace pair, created ONCE and re-posted forever (as
+    /// OpenKey does), instead of allocating two fresh CGEvents per backspace on
+    /// the tap hot path — an English word revert used to cost 2N allocations
+    /// inside one callback.
     private let backspaceDown: CGEvent?
     private let backspaceUp: CGEvent?
 
@@ -59,13 +58,11 @@ public final class EventTapController: @unchecked Sendable {
         self.engine = engine
         let src = CGEventSource(stateID: .privateState)
         self.synthSource = src
-        // Posting a synthetic event makes macOS SUPPRESS real hardware events
-        // for `localEventsSuppressionInterval` — 0.25s by DEFAULT, the same order
-        // as the phantom's 150-650ms delay, and it only ever kicks in on the
-        // Backspace-emitting path because that is the only path that injects a
-        // real keycode. A suppressed-then-released physical key is exactly the
-        // shape of the duplicate we see. Anything that injects events (IMEs,
-        // automation tools) has to zero this and permit local events through.
+        // Posting a synthetic event lets macOS suppress the user's REAL hardware
+        // events for `localEventsSuppressionInterval` afterwards (0.25s by
+        // default). An input method posts on nearly every keystroke, so that
+        // window must be zero and local events always permitted, or fast typing
+        // right after a tone key could lose keystrokes.
         src?.localEventsSuppressionInterval = 0
         let permitAll: CGEventFilterMask =
             [.permitLocalMouseEvents, .permitLocalKeyboardEvents, .permitSystemDefinedEvents]
@@ -75,8 +72,10 @@ public final class EventTapController: @unchecked Sendable {
             permitAll, state: .eventSuppressionStateRemoteMouseDrag)
         let down = CGEvent(keyboardEventSource: src, virtualKey: 51, keyDown: true)
         let up = CGEvent(keyboardEventSource: src, virtualKey: 51, keyDown: false)
+        // Flags are left at the source's creation default (0x20000000 on macOS 27)
+        // rather than overwritten — the same as OpenKey, and nothing here needs
+        // them changed: a private-state source carries no modifier bits.
         for e in [down, up].compactMap({ $0 }) {
-            e.flags = .maskNonCoalesced
             e.setIntegerValueField(.eventSourceUserData, value: Self.selfTag)
         }
         self.backspaceDown = down
@@ -177,19 +176,20 @@ public final class EventTapController: @unchecked Sendable {
 
         guard type == .keyDown else { return Unmanaged.passUnretained(event) }
 
-        // NOTE: there is deliberately no duplicate-key filter here any more.
-        // Four generations of a timing-window "echo guard" lived at this spot and
-        // every one of them had to choose between letting the phantom through
-        // (task→tassk) and eating the user's REAL repeats — because a phantom and
-        // a genuine press are byte-identical (same keycode, autorepeat=0, own
-        // key-up). The version that shipped silently swallowed the second letter
-        // of ordinary English words whose doubled letter is also a Telex tone key
-        // (class, pass, miss, less, press, address, off), which the user
-        // experienced as "typing lags"; it also ate the second of two quick
-        // Delete taps. A visible doubled character is recoverable by the user, a
-        // silently eaten keystroke is not. OpenKey uses this same tap
-        // architecture with no filter at all, so the phantom is a divergence to
-        // find, not an OS law to filter around.
+        // NOTE: there is deliberately no duplicate-key filter here.
+        //
+        // The "doubled tone key" bug (task→tassk) is not an extra key event at
+        // all: it is the user's own Telex tone-CANCEL keystroke (t a s s k, the
+        // second `s` undoing the tone so the screen reads "task"), which
+        // `restoreIfInvalid` then puts back when it reverts the word to raw keys at
+        // commit. It reproduces in the engine alone. See DECISIONS.md,
+        // "Duplicate key-down".
+        //
+        // Four generations of a filter lived here and "fixed" it only by eating
+        // that cancel keystroke — which is indistinguishable, at the key level,
+        // from the second letter of a real double (`pass`, `class`), so they ate
+        // those too, and blocked held-Delete. A visible extra character is
+        // recoverable by the user; a silently eaten keystroke is not.
         let raw = makeRawKey(event)
         let (suppress, edit, _) = engine.handle(raw)
         if let edit {
@@ -242,8 +242,8 @@ private struct TapSink: EventSink {
     let textOnKeyDownOnly: Bool
 
     func postBackspace(count: Int) {
-        // Re-post the ONE pre-built pair (OpenKey parity) instead of allocating a
-        // fresh CGEvent per backspace inside the tap callback.
+        // Re-post the ONE pre-built pair instead of allocating a fresh CGEvent per
+        // backspace inside the tap callback.
         guard let down = backspaceDown, let up = backspaceUp else { return }
         for _ in 0..<count { down.tapPostEvent(proxy); up.tapPostEvent(proxy) }
     }
@@ -264,7 +264,6 @@ private struct TapSink: EventSink {
             }
         }
         for e in [down, up] {
-            e.flags = .maskNonCoalesced
             e.setIntegerValueField(.eventSourceUserData, value: EventTapController.selfTag)
             e.tapPostEvent(proxy)
         }

@@ -727,6 +727,12 @@ per-app re-learn the flag already guards).
 
 ## Duplicate key-down — the phantom-repeat echo guard
 
+> **Correction (2026-09-19): there was never a phantom.** The "duplicate" is
+> the user's own Telex tone-CANCEL keystroke, and the doubled letters come from
+> `restoreIfInvalid` reverting a word to raw keys that include that keystroke.
+> The "Root cause" paragraph below is wrong and is kept only as history. The
+> resolution is the paragraph starting "The echo guard is GONE".
+
 **Symptom.** Typing a word with a Telex tone/mark in Vietnamese mode doubled the
 diacritic key: `task`→`tassk`, `fix`→`fixx`, `google`→`gooogle`, `mà`→`m`,
 `maaf`→`m`. Only keys that make Keystone emit a **Backspace** doubled; plain
@@ -779,50 +785,56 @@ CGEvent-level wiring (reading `keyboardEventKeycode`/`keyboardEventAutorepeat`
 and calling `onKeyDown`/`onKeyUp`/`armIfTransformed`), but the drop/forward
 decision itself no longer needs a real event stream to test.
 
-**The echo guard is GONE, and the root-cause paragraph above is wrong.** The
-guard went through four generations (single-slot arm; 250ms window; 400ms
-drop-all; 500ms refreshing window) and every one of them had to choose between
-letting the phantom through and eating the user's real keystrokes — because a
-phantom and a genuine press are byte-identical: same keycode, `autorepeat=0`,
-its own key-up. The shipped version silently swallowed the second letter of
-ordinary English words whose doubled letter is also a Telex tone key (`class`,
-`pass`, `miss`, `less`, `press`, `address`, `off`), which the user experienced
-as "typing lags"; it also ate the second of two quick Delete taps. **A visible
-doubled character is recoverable by the user; a silently eaten keystroke is
-not.** So the filter is deleted, along with `EchoGuard.swift` and its tests.
+**The echo guard is GONE — and there was never a phantom.** The doubled
+letters are reproduced by the engine alone, with no tap, OS or keyboard
+involved. Typing English in Telex mode, the user sees a tone appear (`tá`,
+`gôgle`, `fĩ`) and, by standard Telex habit, presses that key again to CANCEL
+it, so the screen shows the intended word:
 
-What live experiments on the user's Mac then ELIMINATED, so nobody re-treads it:
+| keys typed (cancel habit) | shown before space | after space, `restoreIfInvalid` on |
+|---|---|---|
+| `t a s s k` | `task` | `tassk` |
+| `g o o o g l e` | `google` | `gooogle` |
+| `f i x x` | `fix` | `fixx` |
 
-- **Not a tap timeout.** The tap-disabled branch was silently re-enabling with
-  no log, which would have hidden exactly this. Instrumented and counted: zero
-  events while reproducing the bug.
-- **Not the suppression.** This file used to claim the phantom is caused by
-  returning nil for the key-down. It cannot be: at the commit where that log was
-  taken, plain letters were suppressed too (`suppress = !noop`, and `rerender()`
-  returns non-empty text for every appended letter) and plain letters never once
-  doubled.
-- **Not real-keycode injection in general.** Control experiment: an inert
-  keycode-106 (F16) down/up pair posted on the plain-letter path. Plain letters
-  still did not double.
-- **Not OpenKey divergence.** Matching OpenKey exactly — `.maskNonCoalesced`
-  instead of `flags = []`, and one pre-created Backspace pair re-posted forever
-  instead of two fresh CGEvents per backspace — changed nothing. (Both were kept
-  anyway: they are strictly better, and they are why deleting now feels smooth.)
-- **Not local-event suppression.** Posting a synthetic event suppresses real
-  hardware events for 0.25s by default, the same order as the phantom's delay.
-  Zeroing `localEventsSuppressionInterval` and permitting all local events
-  during suppression changed nothing.
+On space the word is not valid Vietnamese, so `restoreIfInvalid` reverts it to
+the RAW keystrokes — which contain the cancel key — and the letter doubles. With
+`restoreIfInvalid` off, the same keystrokes commit `task`/`google`/`fix`. The
+"extra" key-downs seen in every event log were the user's real cancel presses,
+which is why they had their own hardware timestamps and key-ups and why
+`CGEventSource.keyState(.hidSystemState)` saw the key held. The tell-tale that
+was missed for a long time: only Telex keys (`s`, `o`, `x`, `f`) ever doubled.
+Plain letters never did. A misdiagnosis of keyboard chatter was also made and
+retracted.
 
-The duplicate remains, bound specifically to the Backspace-emitting path. The
-conclusion is architectural: a CGEventTap is not the right API for an input
-method — it suppresses keys behind the OS's back, so there is always something
-that can be re-delivered. **InputMethodKit** consumes a key by contract
-(`IMKInputController.handle(_:client:) -> Bool`), which removes this failure
-mode by construction, along with `backspaceCount` on the output path, the
-`sendEachKeystroke` / `textOnKeyDownOnly` app-compat knobs, and the
-secure-input limitation. `KeystoneEngine`, `KeyTranslator` and
-`EngineController` are unaffected — `EventSink` is already the seam. The tap is
-kept as a fallback mode rather than deleted.
+So the four filter generations (single-slot arm; 250ms window; 400ms drop-all;
+500ms refreshing window) "fixed" it only by eating the user's cancel keystroke.
+That is also why they ate real double letters (the second `s` of
+`class`/`pass`/`miss`/`address`), which look identical at the key level, and why
+they broke held-Delete. **A visible extra character is recoverable by the user;
+a silently eaten keystroke is not.** `EchoGuard.swift` and its tests are deleted.
+
+Event-tap experiments that changed nothing, recorded so nobody repeats them:
+tap-timeout re-delivery (zero tap-disabled events); `tapPostEvent(proxy)` vs
+`CGEvent.post(.cgSessionEventTap)` vs `.cghidEventTap`; deferring the injection
+by a run-loop hop or until key-up; synthetic-event flags `[]`,
+`.maskNonCoalesced` and the creation default 0x20000000; one pre-created
+Backspace pair; `localEventsSuppressionInterval = 0`; and an inert F16 control
+pair. None of them could have mattered, because the tap was never at fault.
+Three are kept because they are better regardless: the pre-created Backspace pair
+(no per-backspace allocation, and deleting feels smoother), the creation-default
+flags (what OpenKey sends), and a zero local-event suppression window (an input
+method must never swallow the user's own keys after posting). InputMethodKit was
+also probed as a cure. It is moot, and macOS 27 rejects an ad-hoc-signed input
+method anyway (`amfid` -423).
+
+**Where the real fix belongs: `restoreIfInvalid`.** It cannot tell a cancel
+(`t a s s k` → wants `task`) from an intended double letter (`p a s s` → wants
+`pass`). Both leave one `s` composed and two raw. What separates them is which
+reading is a real word, and the system word list decides every case above:
+`task`✓/`tassk`✗, `pass`✓/`pas`✗, `boss`✓/`bos`✗, `class`✓/`clas`✗,
+`fix`✓/`fixx`✗, `passing`✓/`pasing`✗. (`google` is in neither; for that, the
+composed plain-ASCII form is the better fallback.)
 
 **Do NOT let plain keystrokes bypass the synthetic channel.** It is tempting:
 every printable key is suppressed and re-synthesized, even a letter whose only
