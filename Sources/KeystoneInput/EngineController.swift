@@ -33,6 +33,15 @@ public final class EngineController: @unchecked Sendable {
         lock.withLock { engine.reset() }
     }
 
+    /// Installs (or clears, with `nil`) the English word list `Engine.finalize`
+    /// consults when `restoreIfInvalid` fires, to prefer the composed word
+    /// over raw keystrokes when it's the real one (see DECISIONS.md "Restore
+    /// chooses the composed word when it is the real one"). Under the same
+    /// lock as every other engine mutation, so it never races the tap thread.
+    public func setLexicon(_ lexicon: Lexicon?) {
+        lock.withLock { engine.lexicon = lexicon }
+    }
+
     /// Returns (suppress original event?, edit to execute or nil, decision).
     public func handle(_ k: RawKey) -> (suppress: Bool, edit: EngineResult?, decision: KeyDecision) {
         lock.withLock {

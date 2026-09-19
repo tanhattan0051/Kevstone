@@ -14,6 +14,10 @@
 //  - Everything else is scaffolding: real UI, real persistence, but no
 //    engine behavior yet (`EngineConfig` doesn't have a field for it). Each
 //    one is marked `// TODO: wire to engine`.
+//  - `useLexicon` is neither: real engine behavior (gates
+//    `EngineController.setLexicon`, alongside `restoreIfInvalid`), but
+//    deliberately NOT pushed through `EngineConfig` — see `Engine.lexicon`'s
+//    doc comment and DECISIONS.md for why.
 
 import SwiftUI
 import AppKit
@@ -154,6 +158,22 @@ final class AppModel {
         didSet {
             UserDefaults.standard.set(restoreIfInvalid, forKey: Keys.restoreIfInvalid)
             pushConfig()
+            updateLexiconLoaded()
+        }
+    }
+
+    /// "Giữ từ tiếng Anh đang hiển thị (dùng từ điển)" — kill switch for the
+    /// lexicon-aware restore feature (see DECISIONS.md "Restore chooses the
+    /// composed word when it is the real one"). Default ON. Only meaningful
+    /// while `restoreIfInvalid` is also on — the Control Panel greys it out
+    /// otherwise (`BasicPane`, mirroring how `macrosExpandWhenVietnameseOff`
+    /// is greyed out under `macrosEnabled`). The lexicon (~236k words, see
+    /// `updateLexiconLoaded`) is resident ONLY while both this and
+    /// `restoreIfInvalid` are on; turning either off frees it.
+    var useLexicon: Bool = AppModel.loadBool(Keys.useLexicon, default: true) {
+        didSet {
+            UserDefaults.standard.set(useLexicon, forKey: Keys.useLexicon)
+            updateLexiconLoaded()
         }
     }
 
@@ -419,6 +439,46 @@ final class AppModel {
         controller = EngineController(config: EngineConfig())
         tap = EventTapController(engine: controller)
         pushConfig()   // push whatever was loaded from UserDefaults above
+        updateLexiconLoaded()
+    }
+
+    /// A monotonically increasing tag for the most recently REQUESTED
+    /// lexicon load — lets a load that finishes after the gate has since
+    /// changed again recognize it is stale and discard itself instead of
+    /// clobbering newer state (see `updateLexiconLoaded`).
+    private var lexiconLoadGeneration = 0
+
+    /// Kill switch + lazy load: the lexicon `restoreIfInvalid`
+    /// consults to prefer the composed word over raw keystrokes when it's
+    /// the real one (see DECISIONS.md "Restore chooses the composed word
+    /// when it is the real one") is resident ONLY while BOTH
+    /// `restoreIfInvalid` AND `useLexicon` are on — either one turning off
+    /// calls `EngineController.setLexicon(nil)` so the ~236k-entry `Set` can
+    /// be freed. Called once at startup and again from both toggles'
+    /// `didSet`.
+    ///
+    /// Loading reads `/usr/share/dict/words` (~236k lines, ~30 MB resident
+    /// once built), so it always runs off the MAIN thread
+    /// (must never block startup or the UI) and off the TAP thread (
+    /// `EngineController.setLexicon` takes the same lock as every keystroke
+    /// and must not be held for a file read). The generation check on the
+    /// hop back to the main actor discards a load whose gate has since
+    /// flipped off again (or on, then off, then on) while it was running.
+    private func updateLexiconLoaded() {
+        lexiconLoadGeneration += 1
+        let generation = lexiconLoadGeneration
+        guard restoreIfInvalid && useLexicon else {
+            controller.setLexicon(nil)
+            return
+        }
+        let controller = self.controller
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            let lexicon = LexiconLoader.load()
+            Task { @MainActor [weak self] in
+                guard let self, self.lexiconLoadGeneration == generation else { return }
+                controller.setLexicon(lexicon)
+            }
+        }
     }
 
     func bootstrap() {
@@ -563,6 +623,7 @@ final class AppModel {
         orthography = .modern
         quickTelex = false
         restoreIfInvalid = true
+        useLexicon = true
 
         spellCheck = true
         allowFreeToneMark = true
@@ -739,6 +800,7 @@ final class AppModel {
         static let orthography = "settings.orthography"
         static let quickTelex = "settings.quickTelex"
         static let restoreIfInvalid = "settings.restoreIfInvalid"
+        static let useLexicon = "settings.useLexicon"
         static let spellCheck = "settings.spellCheck"
         static let allowFreeToneMark = "settings.allowFreeToneMark"
         static let freeMarkAcrossCoda = "settings.freeMarkAcrossCoda"

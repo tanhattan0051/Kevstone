@@ -81,6 +81,11 @@ private struct BasicPane: View {
             Section("Tuỳ chọn gõ") {
                 Toggle("Kiểm tra chính tả", isOn: $model.spellCheck)
                 Toggle("Tự khôi phục phím với từ sai", isOn: $model.restoreIfInvalid)
+                Toggle("Giữ từ tiếng Anh đang hiển thị (dùng từ điển)", isOn: $model.useLexicon)
+                    .disabled(!model.restoreIfInvalid)
+                Text("Khi phím thô có ký tự lặp do bấm huỷ dấu (tassk), giữ chữ đang hiện nếu đó mới là từ thật (task). Cần bật “Tự khôi phục phím với từ sai”.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 Toggle("Đặt dấu oà, uý (thay vì òa, úy)", isOn: $model.useClassicToneMarks)
                 Toggle("Gõ nhanh (cc=ch, gg=gi, kk=kh, nn=ng, qq=qu, pp=ph, tt=th)",
                        isOn: $model.quickTelex)

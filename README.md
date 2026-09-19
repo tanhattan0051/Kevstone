@@ -14,7 +14,7 @@ diệt tận gốc lỗi kinh điển *"đang gõ tự nhiên mất tiếng Vi�
 ![Platform](https://img.shields.io/badge/macOS-14%2B-000000?logo=apple&logoColor=white)
 ![Swift](https://img.shields.io/badge/Swift-6.0-F05138?logo=swift&logoColor=white)
 ![UI](https://img.shields.io/badge/UI-SwiftUI-1575F9)
-![Tests](https://img.shields.io/badge/tests-154%20·%20251%20ca%20corpus-brightgreen)
+![Tests](https://img.shields.io/badge/tests-261%20·%20251%20ca%20corpus-brightgreen)
 ![License](https://img.shields.io/badge/License-GPLv3-blue)
 [![CI](https://github.com/tanhattan0051/Kevstone/actions/workflows/ci.yml/badge.svg)](https://github.com/tanhattan0051/Kevstone/actions/workflows/ci.yml)
 
@@ -70,8 +70,16 @@ Cùng với **self-tag** chống xử lý lại chính event mình sinh ra, **kh
 - **Đặt dấu kiểu mới / cũ** cho các cặp nguyên âm mở `oa`, `oe`, `uy`:
   - Kiểu mới *(mặc định):* `hòa` · `khỏe` · `thủy`
   - Kiểu cũ *(tuỳ chọn):* `hoà` · `khoẻ` · `thuỷ`
-- **Khôi phục khi gõ sai** *(mặc định bật):* âm tiết không hợp lệ theo âm vị học sẽ tự trả về đúng
-  chuỗi phím thô — nhờ đó gõ từ tiếng Anh như `coins`, `ruins`, `rains` không bị "Việt hoá" nhầm.
+- **Tự khôi phục phím với từ sai** *(mặc định bật):* âm tiết không hợp lệ theo âm vị học sẽ tự trả về
+  đúng chuỗi phím thô — nhờ đó gõ từ tiếng Anh như `coins`, `ruins`, `rains` không bị "Việt hoá" nhầm.
+  Khi thói quen gõ đè phím dấu để **huỷ** dấu (`t a s s k` muốn "task") khiến phím thô có ký tự lặp
+  (`tassk`), ứng dụng còn so với một từ điển tiếng Anh: nếu chữ đang hiện trên màn hình (`task`) mới là
+  từ thật, chuỗi phím thô (`tassk`) thì không, **và** chữ đang hiện chỉ khác phím thô ở chỗ *bớt* ký tự
+  (không phải thêm chữ khác — chặn trường hợp gõ nhanh phụ âm biến `nike` thành `niche`), kết quả sẽ là
+  chữ đang hiện — xem DECISIONS.md "Restore chooses the composed word when it is the real one". Có
+  công tắc riêng **"Giữ từ tiếng Anh đang hiển thị (dùng từ điển)"** *(mặc định bật, cần bật cùng "Tự
+  khôi phục phím với từ sai")* trong Bảng điều khiển để tắt hẳn việc dùng từ điển nếu cần — từ điển chỉ
+  được nạp (và giải phóng bộ nhớ khi tắt) lúc cả hai công tắc đều bật.
 - **Khôi phục dấu qua Backspace:** buffer được dựng lại từ phím thô sau mỗi lần gõ (kể cả xoá), nên
   xoá một ký tự dấu rồi gõ lại luôn đúng. Có cả **double-strike undo** (gõ lại phím thanh lần hai để
   bỏ dấu và trả ra ký tự thô).
@@ -167,10 +175,13 @@ nghiệp vụ tiếng Việt nằm hết ở tầng engine dưới dạng **hàm
 
 ## Kiểm thử & CI
 
-- **Engine:** 108 hàm test chạy trên **251 ca corpus tiếng Việt** (11 file JSON: thanh, dấu, đặt dấu,
-  vị trí, quick-telex, VNI, regression, khôi phục…).
-- **Tầng nhập:** 46 hàm test (translator, executor, engine-controller, phím chuyển, smart-switch).
-- **Tổng: 154 hàm test**, tất cả xanh.
+- **Engine:** 132 hàm test chạy trên **251 ca corpus tiếng Việt** (11 file JSON: thanh, dấu, đặt dấu,
+  vị trí, quick-telex, VNI, regression, khôi phục…) cùng bộ test thuần cho `Lexicon`/`RestoreDecision`
+  (kể cả "subsequence guard" chặn gõ tắt phụ âm biến `nike` thành `niche`).
+- **Tầng nhập:** 129 hàm test (translator, executor, engine-controller, phím chuyển, smart-switch,
+  khôi phục theo từ điển — kể cả một bộ chạy trên `/usr/share/dict/words` thật, tự bỏ qua nếu máy không
+  có file này).
+- **Tổng: 261 hàm test**, tất cả xanh.
 - **CI:** [`ci.yml`](.github/workflows/ci.yml) chạy `swift build && swift test` (toàn bộ suite) trên
   `macos-15` cho mỗi push & pull request.
 

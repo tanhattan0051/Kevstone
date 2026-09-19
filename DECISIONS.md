@@ -828,13 +828,13 @@ method must never swallow the user's own keys after posting). InputMethodKit was
 also probed as a cure. It is moot, and macOS 27 rejects an ad-hoc-signed input
 method anyway (`amfid` -423).
 
-**Where the real fix belongs: `restoreIfInvalid`.** It cannot tell a cancel
+**Fixed in `restoreIfInvalid` itself, via a lexicon.** It cannot tell a cancel
 (`t a s s k` → wants `task`) from an intended double letter (`p a s s` → wants
 `pass`). Both leave one `s` composed and two raw. What separates them is which
 reading is a real word, and the system word list decides every case above:
 `task`✓/`tassk`✗, `pass`✓/`pas`✗, `boss`✓/`bos`✗, `class`✓/`clas`✗,
-`fix`✓/`fixx`✗, `passing`✓/`pasing`✗. (`google` is in neither; for that, the
-composed plain-ASCII form is the better fallback.)
+`fix`✓/`fixx`✗, `passing`✓/`pasing`✗ — implemented below, see "Restore chooses
+the composed word when it is the real one".
 
 **Do NOT let plain keystrokes bypass the synthetic channel.** It is tempting:
 every printable key is suppressed and re-synthesized, even a letter whose only
@@ -861,6 +861,147 @@ with that bug fixed it is back on, which — together with `freeMarkAcrossCoda` 
 (the author's "dấu ở cuối" style, `tana`→tân) — gives the OpenKey-like result:
 Vietnamese types cleanly, English/informal words stay literal, no doubling.
 `EngineConfig.restoreIfInvalid` also defaults **true**, matching.
+
+## Restore chooses the composed word when it is the real one
+
+Even with `restoreIfInvalid` back on, the tone-CANCEL habit documented above
+under "Duplicate key-down" still doubled a letter, because raw-keystroke
+restore is exactly what makes the cancel key visible:
+
+| keys typed | shown before space | committed (raw restore) | wanted |
+|---|---|---|---|
+| `t a s s k` | `task` | `tassk` | `task` |
+| `g o o o g l e` | `google` | `gooogle` | `google` |
+| `f i x x` | `fix` | `fixx` | `fix` |
+| `c l a s s s s` | `class` | `classss` | `class` |
+| `p a s s s s` | `pass` | `passss` | `pass` |
+| `m i s s s s` | `miss` | `missss` | `miss` |
+| `p r e s s s s` | `press` | `pressss` | `press` |
+| `l e s s s s` | `less` | `lessss` | `less` |
+| `o f f f f` | `off` | `offff` | `off` |
+
+**The rule** (`RestoreDecision.choose`, `Sources/KeystoneEngine/Lexicon.swift`):
+
+```
+use COMPOSED  iff  lexicon != nil
+               AND lexicon.contains(composed)
+               AND !lexicon.contains(raw)
+               AND composed is a SUBSEQUENCE of raw (obtainable by deleting characters only)
+otherwise     RAW  (exactly today's behaviour)
+```
+
+Both `composed` and `raw` are compared case-insensitively and BEFORE
+capitalization — sentence-start auto-capitalize is applied afterward, to
+whichever side wins (`Engine.finalize`'s `capitalized(_:if:)` helper), so it
+never influences the lexicon lookup itself. `raw` is the collapsed-doubled-w
+keystrokes exactly as today's revert already computes them; `composed` is the
+on-screen word rendered through the UNICODE table (`outputTable(for: .unicode)`)
+regardless of the active code table, since the comparison is against an
+English word list and a legacy table's ASCII bytes are identical anyway.
+
+**The subsequence guard.** A genuine Telex tone/mark CANCEL only ever DELETES
+characters from what's on screen (`tassk` → `task` deletes one `s`) — it never
+introduces a different letter. The quick-consonant toggles (`quickTelex`,
+`quickStartConsonant`, `quickEndConsonant`) are a different shape entirely:
+they turn a raw consonant into a DIFFERENT, longer spelling (`nn`→`ng`,
+`tt`→`th`, `j`→`gi`, `w`→`qu`, `g`→`ng`, `k`→`ch`), which can land composed on
+an unrelated real word — `sinning`→`singing`, `nike`→`niche`,
+`wilted`→`quilted`, `raged`→`ranged`, `bak`→`bach`. Two code reviewers caught
+that the first version of this rule (without the subsequence requirement)
+would wrongly commit `niche` for someone who actually typed `nike`, purely
+because the lexicon happened to contain `niche` and not `nike` — rewriting
+keystrokes the user never typed. `RestoreDecision.isSubsequence` closes that:
+composed must be reachable from raw by deletion alone, so every
+quick-consonant case above still falls back to `.raw`, matching HEAD.
+`RestoreDecisionSubsequenceGuardTests` and `LexiconRestoreQuickConsonantFallsBackToRawTests`
+pin it, including the worst case (lexicon contains the wrong composed word
+and not raw).
+
+**Why RAW must win when both (or neither) are words, or the subsequence guard
+fails.** When both spellings happen to be real words (contrived, but
+`RestoreDecisionTests.bothInLexiconChoosesRaw` pins it), when neither is, or
+when composed isn't reachable from raw by deletion, raw wins: it's the safer
+default, identical to having no lexicon at all, and it's what makes
+`Engine.lexicon == nil` byte-identical to the pre-fix engine (see below). Note
+this is NOT the same claim as "natural typing of a real word always has raw
+in the lexicon" — that claim is false (see "Known limitation" below); it is
+`RestoreDecision`'s own fallback-to-raw default, applied whenever the
+conditions above aren't ALL met, that keeps things safe regardless of what
+is or isn't in the lexicon.
+
+**Dormant-at-engine / enabled-by-app, the same pattern as
+`freeMarkAcrossCoda`.** `Engine.lexicon: Lexicon?` defaults `nil` — with no
+lexicon installed, `RestoreDecision.choose` always returns `.raw`, so every
+existing restore-if-invalid behavior (corpus, `DoubledWTests`,
+`LiteralRestoreTests`, ...) is completely untouched at the engine/test level;
+`LexiconRestoreDormantWithoutLexiconTests` pins that `tassk` still reverts to
+`tassk` with `lexicon: nil`, and `LexiconRestoreClearingLexiconRestoresHeadBehaviorTests`
+pins that calling `setLexicon(nil)` AFTER a lexicon was installed restores the
+same behavior (not just "never installed"). **The app** additionally gates
+this behind its own kill switch, `AppModel.useLexicon` (Control Panel: "Giữ
+từ tiếng Anh đang hiển thị (dùng từ điển)", right beside "Tự khôi phục phím
+với từ sai", greyed out when that toggle is off) — the lexicon is loaded only
+while BOTH `restoreIfInvalid` AND `useLexicon` are on; either turning off
+calls `EngineController.setLexicon(nil)` so the `Set` can be freed, and
+turning both back on reloads it. Loading always happens off the main thread
+(`AppModel.updateLexiconLoaded()`, `DispatchQueue.global(qos: .utility)` —
+never blocking startup) and never on the tap thread either, since
+`EngineController.setLexicon` takes the same lock as every keystroke and must
+not be held for a file read; a generation counter discards a load that
+finishes after the gate has since flipped again, so a fast toggle-off can't
+be clobbered by a slow in-flight load. `Lexicon` is deliberately kept OUT of
+`EngineConfig` for two concrete reasons, not "it's diffed every change" —
+nothing in this codebase ever compares two `EngineConfig` values for equality
+(`EngineController.updateConfig` just assigns `engine.config = config`, no
+diff): (1) `EngineConfig` is `Codable`, which Swift auto-synthesizes only
+when every stored property is `Codable` too — `Lexicon` deliberately isn't,
+so it could not become a field without hand-writing that conformance for no
+benefit; (2) `AppModel.pushConfig()` builds a brand-new `EngineConfig(...)`
+value from AppModel's own stored settings on EVERY preference change, even
+unrelated ones (`quickTelex`, `allowFreeToneMark`, ...) — folding the lexicon
+into that would mean threading a ~236k-entry word list through routine
+settings plumbing that has nothing to do with it. Keeping `Engine.lexicon`
+a separate stored property, set only by `EngineController.setLexicon`, keeps
+the kill switch's load/unload independent of every unrelated settings push.
+
+**Coverage: two supplementary word lists, two different jobs**
+(`Sources/KeystoneInput/SupplementaryWords.swift`). `/usr/share/dict/words`
+is the 1934 Webster corpus (235,976 entries) and correctly separates every
+case in the nine-row table above — but it lacks essentially all modern
+internet/software vocabulary (`google`, `email`, `website`, `vietnix`, ...)
+AND, separately, a surprising number of ordinary inflections, loanwords,
+acronyms and surnames an exhaustive offline search turned up (`fussed`,
+`jarred`, `herr`, `oss`, `hassan`, ...) whose COMPOSED (collapsed-double-
+letter) form happens to already be a different real word in the system list
+(`fussed`→`fused`, `jarred`→`jared`, `OSS`→`OS`, `Herr`→`Her`, `Kerr`→`Ker`).
+Without protection, that second kind is worse than "no improvement" — it's a
+regression, silently rewriting a correctly-typed real word into a different
+one. So `SupplementaryWords` keeps two SEPARATE lists: `all` (modern words,
+enabling the COMPOSED side, e.g. `vietnixx`→`vietnix`) and
+`protectedRealWords` (old words the 1934 list lacks, protecting the RAW side
+so it keeps beating a coincidentally-real composed collapse). Both are merged
+by `LexiconLoader.load()`. Neither list carries a vowel-less entry (`http`,
+`dns`, `ssl`, ...) or a word that already types as a valid Vietnamese
+syllable on its own (`cors`, `meme`, `orm`, `saas`, ...): `Engine.finalize`
+only reaches `RestoreDecision` when the composition has a vowel AND fails
+Vietnamese phonological validity, so either kind of entry could never
+actually be looked up — dead weight, removed rather than kept-but-inert.
+
+**Known limitation: a real word missing from both lists.** A real English
+word that is in NEITHER `/usr/share/dict/words` NOR either supplementary
+list, typed naturally with a doubled Telex key, can still collapse to the
+wrong spelling exactly like it did before this feature existed — e.g., before
+`protectedRealWords` was added, `fussed` (typed with `restoreIfInvalid` +
+`quickTelex`/tone-cancel habit shaping) collapsed to `fused`. This is a real,
+accepted limitation, not a claim that "natural typing always has raw in the
+lexicon" — that claim was false and has been removed from this document and
+from the code comments that repeated it. `protectedRealWords` covers the
+cases an exhaustive offline search against the 1934 corpus actually found,
+not every English word that could ever be missing; extending
+`SupplementaryWords.all`/`.protectedRealWords` is the fix the next time a
+real, commonly-typed word is found falling into this gap. The new
+`useLexicon` toggle (Control Panel, see above) is the user-facing escape
+hatch for that case: turning it off returns to raw-only restore.
 
 ## Auto-update (Phase 5, no Apple account)
 

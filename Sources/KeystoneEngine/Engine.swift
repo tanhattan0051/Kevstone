@@ -29,6 +29,21 @@ public final class Engine {
     }
     private var macroTable: MacroTable
 
+    /// English word list consulted by `finalize`'s restore branch to choose
+    /// between the composed and raw spellings (see DECISIONS.md "Restore
+    /// chooses the composed word when it is the real one"). Deliberately
+    /// OUTSIDE `EngineConfig`: `EngineConfig` is `Codable` (a `Lexicon`
+    /// deliberately isn't) and gets rebuilt from scratch on every unrelated
+    /// preference change by `AppModel.pushConfig()` — threading a
+    /// ~236k-entry word set through that would cost real memory/CPU on every
+    /// settings tweak for no benefit, since nothing actually compares two
+    /// `EngineConfig` values for equality anywhere in this codebase. `nil`
+    /// (the default) keeps every existing restore-if-invalid behavior
+    /// byte-identical — this feature is dormant until something (the app)
+    /// calls `EngineController.setLexicon`, which the app additionally gates
+    /// behind its own `useLexicon` kill switch (see `AppModel`).
+    public var lexicon: Lexicon?
+
     public init(config: EngineConfig) {
         self.config = config
         self.macroTable = MacroTable(config.macros)
@@ -253,17 +268,34 @@ public final class Engine {
             // bare "ww" → "w"). This makes an English word typed with doubled
             // w's revert cleanly — "wwin" → "win", "swwim" → "swim" — while
             // words without a "ww" pair (boss, wrong) are untouched.
-            var keys = Engine.collapseDoubledW(rawKeys)
-            if shouldCapitalize, let first = keys.first {
-                keys[0] = Character(first.uppercased())
+            let collapsedRawKeys = Engine.collapseDoubledW(rawKeys)
+            // Standard Telex tone-CANCEL habit: the user presses the same
+            // tone/mark key again once the intended word is showing, so the
+            // RAW keystrokes (about to be restored below) include that
+            // cancel key and double a letter (task→tassk, google→gooogle).
+            // `RestoreDecision` picks the COMPOSED word instead when it is
+            // the real one and the raw spelling isn't — see DECISIONS.md
+            // "Restore chooses the composed word when it is the real one".
+            // The composed side of the comparison is rendered through the
+            // UNICODE table regardless of the active code table (a legacy
+            // table's ASCII bytes are identical anyway, and this keeps the
+            // comparison stable), and both strings are taken BEFORE
+            // capitalization — capitalization is applied after the choice,
+            // to whichever branch wins.
+            let unicodeTable = outputTable(for: .unicode)
+            let composedWord = unicodeTable.decode(encode(comp, table: unicodeTable))
+            let rawWord = String(collapsedRawKeys)
+            if RestoreDecision.choose(composed: composedWord, raw: rawWord, lexicon: lexicon) == .composed {
+                finalUnits = encode(capitalized(comp, if: shouldCapitalize), table: table)
+            } else {
+                var keys = collapsedRawKeys
+                if shouldCapitalize, let first = keys.first {
+                    keys[0] = Character(first.uppercased())
+                }
+                finalUnits = keys.flatMap { table.plain($0) }   // revert to (w-collapsed) raw keystrokes
             }
-            finalUnits = keys.flatMap { table.plain($0) }   // revert to (w-collapsed) raw keystrokes
         } else {
-            var comp = comp
-            if shouldCapitalize, !comp.cells.isEmpty, !comp.cells[0].isUpper {
-                comp.cells[0].isUpper = true
-            }
-            finalUnits = encode(comp, table: table)
+            finalUnits = encode(capitalized(comp, if: shouldCapitalize), table: table)
         }
         let common = commonPrefixCount(prevUnits, finalUnits)
         let bs = prevUnits.count - common
@@ -305,6 +337,19 @@ public final class Engine {
             i += 1
         }
         return out
+    }
+
+    /// Sentence-start auto-capitalize (Phase 4): uppercases the first cell,
+    /// unless it already is one. Shared by `finalize`'s two composed-output
+    /// paths (the ordinary commit, and the restore branch's composed winner)
+    /// so capitalization is applied identically either way, always AFTER the
+    /// restore decision itself (which compares the un-capitalized forms).
+    private func capitalized(_ comp: Composition, if shouldCapitalize: Bool) -> Composition {
+        var comp = comp
+        if shouldCapitalize, !comp.cells.isEmpty, !comp.cells[0].isUpper {
+            comp.cells[0].isUpper = true
+        }
+        return comp
     }
 
     private func commonPrefixCount<T: Equatable>(_ a: [T], _ b: [T]) -> Int {
