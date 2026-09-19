@@ -25,7 +25,7 @@ final class Updater {
 
     /// Hardcoded, case-sensitive repo — the only source this updater will
     /// ever fetch from.
-    private static let latestReleaseAPIURL = URL(string: "https://api.github.com/repos/tanhattan0051/Kevstone/releases/latest")!
+    private static let latestReleaseAPIURL = URL(string: "https://api.github.com/repos/tanhattan0051/Keystone/releases/latest")!
 
     /// Embedded Ed25519 public key (base64, 32 raw bytes) used to verify
     /// every downloaded update. There is no code path that installs an

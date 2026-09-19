@@ -17,7 +17,7 @@
 #                            persist across auto-updates.
 #   KEYSTONE_ED25519_KEY     path to the base64 Ed25519 private key.
 #                            Default: ~/.config/keystone/ed25519_private.b64
-#   KEYSTONE_REPO            GitHub repo. Default: tanhattan0051/Kevstone
+#   KEYSTONE_REPO            GitHub repo. Default: tanhattan0051/Keystone
 
 set -euo pipefail
 
@@ -40,7 +40,7 @@ SIG="${DIST}/Keystone.zip.sig"
 
 SIGN_IDENTITY="${KEYSTONE_SIGN_IDENTITY:--}"
 PRIV_KEY="${KEYSTONE_ED25519_KEY:-${HOME}/.config/keystone/ed25519_private.b64}"
-REPO="${KEYSTONE_REPO:-tanhattan0051/Kevstone}"
+REPO="${KEYSTONE_REPO:-tanhattan0051/Keystone}"
 
 for tool in swift ditto codesign gh; do
     command -v "${tool}" >/dev/null 2>&1 || { echo "error: '${tool}' not found in PATH" >&2; exit 1; }

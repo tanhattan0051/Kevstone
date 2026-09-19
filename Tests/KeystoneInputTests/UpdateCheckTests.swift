@@ -67,12 +67,12 @@ struct ReleaseInfoParseTests {
         // ignore them rather than choke on unexpected JSON.
         fields.append("\"draft\": false")
         fields.append("\"prerelease\": false")
-        fields.append("\"html_url\": \"https://github.com/tanhattan0051/Kevstone/releases/tag/v1.0.1\"")
+        fields.append("\"html_url\": \"https://github.com/tanhattan0051/Keystone/releases/tag/v1.0.1\"")
         return Data("{\(fields.joined(separator: ", "))}".utf8)
     }
 
-    private let zipURL = "https://github.com/tanhattan0051/Kevstone/releases/download/v1.0.1/Keystone.zip"
-    private let sigURL = "https://github.com/tanhattan0051/Kevstone/releases/download/v1.0.1/Keystone.zip.sig"
+    private let zipURL = "https://github.com/tanhattan0051/Keystone/releases/download/v1.0.1/Keystone.zip"
+    private let sigURL = "https://github.com/tanhattan0051/Keystone/releases/download/v1.0.1/Keystone.zip.sig"
 
     @Test func parsesValidPayload() {
         let data = json(tag: "v1.0.1", assets: [
@@ -113,7 +113,7 @@ struct ReleaseInfoParseTests {
 
     @Test func nonHTTPSAssetURLIsNil() {
         let data = json(tag: "v1.0.1", assets: [
-            ("Keystone.zip", "http://github.com/tanhattan0051/Kevstone/releases/download/v1.0.1/Keystone.zip"),
+            ("Keystone.zip", "http://github.com/tanhattan0051/Keystone/releases/download/v1.0.1/Keystone.zip"),
             ("Keystone.zip.sig", sigURL),
         ])
         #expect(ReleaseInfo.parse(latestReleaseJSON: data) == nil)

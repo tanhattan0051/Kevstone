@@ -16,7 +16,7 @@ diệt tận gốc lỗi kinh điển *"đang gõ tự nhiên mất tiếng Vi�
 ![UI](https://img.shields.io/badge/UI-SwiftUI-1575F9)
 ![Tests](https://img.shields.io/badge/tests-261%20·%20251%20ca%20corpus-brightgreen)
 ![License](https://img.shields.io/badge/License-GPLv3-blue)
-[![CI](https://github.com/tanhattan0051/Kevstone/actions/workflows/ci.yml/badge.svg)](https://github.com/tanhattan0051/Kevstone/actions/workflows/ci.yml)
+[![CI](https://github.com/tanhattan0051/Keystone/actions/workflows/ci.yml/badge.svg)](https://github.com/tanhattan0051/Keystone/actions/workflows/ci.yml)
 
 [Vì sao Keystone](#vì-sao-keystone) ·
 [Tính năng](#tính-năng) ·
@@ -132,7 +132,7 @@ cập nhật, hiển thị) · **Thông tin**. Kèm cửa sổ **Công cụ chuy
 
 ## Cài đặt
 
-Tải bản mới nhất ở trang **[Releases](https://github.com/tanhattan0051/Kevstone/releases/latest)** rồi
+Tải bản mới nhất ở trang **[Releases](https://github.com/tanhattan0051/Keystone/releases/latest)** rồi
 làm theo 4 bước:
 
 1. Tải file **`Keystone-<phiên bản>.dmg`**.

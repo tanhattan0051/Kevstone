@@ -1237,9 +1237,9 @@ Keystone ships a self-contained auto-updater instead of Sparkle: no Apple
 Developer account, no third-party update framework, just GitHub Releases plus
 an Ed25519 signature Keystone verifies itself.
 
-**Source: GitHub Releases on `tanhattan0051/Kevstone`, nothing else.** The
+**Source: GitHub Releases on `tanhattan0051/Keystone`, nothing else.** The
 updater only ever calls the hardcoded, HTTPS
-`https://api.github.com/repos/tanhattan0051/Kevstone/releases/latest`
+`https://api.github.com/repos/tanhattan0051/Keystone/releases/latest`
 endpoint, and only ever downloads the two asset URLs *that exact response*
 returns — it never follows an update URL from anywhere else (not a web page,
 not user input, not a redirect to a different repo). Each release publishes
