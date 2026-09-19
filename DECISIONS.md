@@ -824,6 +824,20 @@ secure-input limitation. `KeystoneEngine`, `KeyTranslator` and
 `EngineController` are unaffected — `EventSink` is already the seam. The tap is
 kept as a fallback mode rather than deleted.
 
+**Do NOT let plain keystrokes bypass the synthetic channel.** It is tempting:
+every printable key is suppressed and re-synthesized, even a letter whose only
+output is itself, so returning the physical key unsuppressed looks like free
+speed (one suppression + two CGEvents saved on ~80% of keys). It was tried and
+it LOSES CHARACTERS. Ordering is only guaranteed inside one callback — events
+posted with `tapPostEvent` are delivered before the event that callback returns.
+Across callbacks it is not: a plain letter passed through physically can
+overtake the Backspace events a tone key posted one callback earlier, and those
+Backspaces then delete the new letter (and the engine's model of the screen
+drifts from then on). Every character must keep going through the same ordered
+channel. The unit tests could not see this — `EngineControllerTests`'
+reconstruction helper applies edits in call order by construction — so this is
+recorded here instead.
+
 ## `restoreIfInvalid` back ON (after the duplicate-key-down fix)
 
 `AppModel.restoreIfInvalid` defaults **true** ("Tự khôi phục phím với từ sai") —
