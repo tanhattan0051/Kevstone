@@ -6,27 +6,9 @@ import Testing
 @testable import KeystoneInput
 @testable import KeystoneEngine
 
-private func letter(_ c: Character) -> RawKey { RawKey(keyCode: 0, chars: String(c)) }
-private let RETURN = RawKey(keyCode: 36, chars: "\r")
-private let BACKSPACE = RawKey(keyCode: 51, chars: "")
-
-/// Feed each key of `telex` (plus a trailing Return to flush) and reconstruct
-/// the on-screen text from the edits EngineController hands back.
-private func typeAndFlush(_ telex: String, config: EngineConfig = EngineConfig()) -> String {
-    let c = EngineController(config: config)
-    var acc: [Unicode.Scalar] = []
-    func apply(_ e: EngineResult) {
-        if e.backspaceCount > 0 { acc.removeLast(min(e.backspaceCount, acc.count)) }
-        acc.append(contentsOf: e.text.unicodeScalars)
-    }
-    for ch in telex {
-        let (_, edit, _) = c.handle(letter(ch))
-        if let edit { apply(edit) }
-    }
-    let (_, edit, _) = c.handle(RETURN)   // commitPassthrough → flush edit
-    if let edit { apply(edit) }
-    return String(String.UnicodeScalarView(acc))
-}
+// `letter`/`RETURN`/`BACKSPACE`/`typeAndFlush`/`applyRealistically` are
+// shared with LexiconRestoreTests.swift and LexiconRealDictionaryTests.swift
+// — see RealisticTyping.swift.
 
 @Suite("EngineController")
 struct EngineControllerTests {
@@ -49,23 +31,10 @@ struct EngineControllerTests {
     @Test func backspaceRestoresBase() {
         let c = EngineController(config: EngineConfig())
         var acc: [Unicode.Scalar] = []
-        func apply(_ e: EngineResult) {
-            if e.backspaceCount > 0 { acc.removeLast(min(e.backspaceCount, acc.count)) }
-            acc.append(contentsOf: e.text.unicodeScalars)
-        }
-
-        let (_, edit1, _) = c.handle(letter("a"))
-        if let edit1 { apply(edit1) }
-
-        let (_, edit2, _) = c.handle(letter("s"))   // shows "á"
-        if let edit2 { apply(edit2) }
-
-        let (_, edit3, _) = c.handle(BACKSPACE)
-        if let edit3 { apply(edit3) }
-
-        let (_, edit4, _) = c.handle(RETURN)
-        if let edit4 { apply(edit4) }
-
+        applyRealistically(c.handle(letter("a")), to: &acc)
+        applyRealistically(c.handle(letter("s")), to: &acc)   // shows "á"
+        applyRealistically(c.handle(BACKSPACE), to: &acc)
+        applyRealistically(c.handle(RETURN), to: &acc)
         #expect(String(String.UnicodeScalarView(acc)) == "a")
     }
 

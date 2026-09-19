@@ -80,13 +80,32 @@ public final class EngineController: @unchecked Sendable {
             let d = KeyTranslator.decide(k)
             switch d {
             case .character(let ch):
+                // The engine ALWAYS takes ownership of a character while
+                // active — it either appends to the composing word (and may
+                // render nothing new, a no-op edit) or hands back the
+                // character embedded in a real edit (empty buffer, or a
+                // commit boundary). Suppress unconditionally: a physical
+                // passthrough here is exactly what DECISIONS.md's "Do NOT
+                // let plain keystrokes bypass the synthetic channel" warns
+                // against, and letting a no-op character through desyncs
+                // `Engine.prevUnits` from the real screen (see "Suppress
+                // every character the engine took ownership of, even a
+                // no-op one").
                 let r = engine.process(KeyInput(ch))
                 let noop = r.backspaceCount == 0 && r.text.isEmpty
-                return (!noop, noop ? nil : r, d)
+                return (true, noop ? nil : r, d)
             case .backspace:
+                // Only suppress when the engine actually owns an in-progress
+                // word: an empty buffer means this Backspace is an ordinary
+                // passthrough Delete the engine never touched. A non-empty
+                // buffer means the engine consumed one raw key regardless of
+                // whether the re-render is visible — a no-op backspace here
+                // deletes an ABSORBED (invisible) key, not a visible
+                // character, so it must not fall through as a real Delete.
+                let wasComposing = engine.isComposing
                 let r = engine.process(.backspace)
                 let noop = r.backspaceCount == 0 && r.text.isEmpty
-                return (!noop, noop ? nil : r, d)
+                return (wasComposing, noop ? nil : r, d)
             case .commitPassthrough:
                 let r = engine.flush()
                 let noop = r.backspaceCount == 0 && r.text.isEmpty

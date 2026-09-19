@@ -14,27 +14,10 @@ import Testing
 @testable import KeystoneInput
 @testable import KeystoneEngine
 
-private func letter(_ c: Character) -> RawKey { RawKey(keyCode: 0, chars: String(c)) }
-private let RETURN = RawKey(keyCode: 36, chars: "\r")
-
-/// Same reconstruction pattern as EngineControllerTests.typeAndFlush, but
-/// lets the caller install a lexicon on the controller before typing.
-private func typeAndFlush(_ telex: String, config: EngineConfig = EngineConfig(), lexicon: Lexicon?) -> String {
-    let c = EngineController(config: config)
-    c.setLexicon(lexicon)
-    var acc: [Unicode.Scalar] = []
-    func apply(_ e: EngineResult) {
-        if e.backspaceCount > 0 { acc.removeLast(min(e.backspaceCount, acc.count)) }
-        acc.append(contentsOf: e.text.unicodeScalars)
-    }
-    for ch in telex {
-        let (_, edit, _) = c.handle(letter(ch))
-        if let edit { apply(edit) }
-    }
-    let (_, edit, _) = c.handle(RETURN)
-    if let edit { apply(edit) }
-    return String(String.UnicodeScalarView(acc))
-}
+// `letter`/`RETURN`/`typeAndFlush`/`applyRealistically` are shared with
+// EngineControllerTests.swift and LexiconRealDictionaryTests.swift — see
+// RealisticTyping.swift. `typeAndFlush` installs `lexicon` on the controller
+// before typing.
 
 /// A small, hermetic English word list — never the real system dictionary —
 /// covering exactly the words exercised by this suite.
@@ -143,16 +126,10 @@ struct LexiconRestoreClearingLexiconRestoresHeadBehaviorTests {
         c.setLexicon(testLexicon)
         c.setLexicon(nil)
         var acc: [Unicode.Scalar] = []
-        func apply(_ e: EngineResult) {
-            if e.backspaceCount > 0 { acc.removeLast(min(e.backspaceCount, acc.count)) }
-            acc.append(contentsOf: e.text.unicodeScalars)
-        }
         for ch in "tassk" {
-            let (_, edit, _) = c.handle(letter(ch))
-            if let edit { apply(edit) }
+            applyRealistically(c.handle(letter(ch)), to: &acc)
         }
-        let (_, edit, _) = c.handle(RETURN)
-        if let edit { apply(edit) }
+        applyRealistically(c.handle(RETURN), to: &acc)
         #expect(String(String.UnicodeScalarView(acc)) == "tassk")
     }
 }

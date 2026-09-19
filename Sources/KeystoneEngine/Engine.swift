@@ -52,6 +52,15 @@ public final class Engine {
     private var rawKeys: [Character] = []   // the composing word's raw keys
     private var prevUnits: [UInt16] = []    // active table's code units currently "on screen"
 
+    /// Whether the engine currently owns an in-progress word (`rawKeys` is
+    /// non-empty). `EngineController` reads this, BEFORE calling `process`,
+    /// to decide whether a Backspace belongs to the engine (and must be
+    /// suppressed even if it turns out to be a no-op edit) or is an ordinary
+    /// passthrough Delete with nothing composing (see DECISIONS.md
+    /// "Suppress every character the engine took ownership of, even a
+    /// no-op one"). Read-only and side-effect free — `Engine` stays pure.
+    public var isComposing: Bool { !rawKeys.isEmpty }
+
     /// Whether the NEXT committed word starts a new sentence — used only by
     /// macro `autoCapitalize` (see `MacroTable.expandedText`). A `.`, `!`,
     /// `?`, or newline boundary starts a new sentence; committing any word

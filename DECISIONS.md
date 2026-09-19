@@ -1094,3 +1094,120 @@ self-signed certificate, macOS may treat the swapped-in bundle as a
 different app for TCC purposes, so Accessibility (and Input Monitoring) can
 require re-granting after an update — the same class of issue
 `AppModel.needsRelaunch` already surfaces for a fresh Accessibility grant.
+
+## Screen desync — suppress every character the engine took ownership of, even a no-op one
+
+**Symptom.** Typing certain words — `tasks`, `servers`, `hashes`, `offsets`
+— produced a corrupted result instead of the plain English word:
+`tasks`→`táasks`, `servers`→`sểervers`, `hashes`→`háashes`,
+`offsets`→`óoffsets`. Unlike the "Duplicate key-down" bug above, this one
+requires no cancel-key habit at all — the word is typed once, plainly.
+
+**Root cause: `EngineController.handle`'s ACTIVE branch conflated "no-op
+edit" with "physical passthrough".** For `.character`/`.backspace` it
+computed `noop = r.backspaceCount == 0 && r.text.isEmpty` and returned
+`suppress: !noop` — so a keystroke that produced a no-op edit was left
+UNSUPPRESSED, reaching the app physically. That is wrong whenever the engine
+still took the keystroke into its composing word: `Engine.rerender()`
+re-folds the WHOLE word from `rawKeys` on every keystroke, and a mid-word
+tone/mark key can be absorbed into `rawKeys` while rendering nothing new
+(the fold's net effect on the visible text is zero, even though the key is
+now part of the word) — e.g. typing `t a s k s`, the second `s` (after the
+`k` coda already closed the syllable) is absorbed with no visible change:
+the screen still reads `ták`, but `Engine.rawKeys` is now `tasks`. A no-op
+edit is not the same claim as "the engine has nothing to do with this key" —
+the old code treated them as the same thing.
+
+Letting that `s` pass through physically means the REAL screen becomes
+`táks` (the app inserted it itself) while `Engine.prevUnits` — the engine's
+own belief of what's on screen — is still the 3-unit `ták`, because
+`rerender()` only ever updates `prevUnits` to what IT rendered, never to
+what the app actually displays. The two beliefs are now different, silently.
+Nothing looks wrong yet — the desync is invisible until the next edit, which
+computes its backspace count against the engine's (now wrong) `prevUnits`
+and deletes the wrong number of characters from the REAL (now longer)
+screen. For `tasks`, commit reverts to raw (`ták`'s coda `k` isn't legal)
+and the arithmetic that should turn `ták` into `tasks ` instead turns the
+real `táks` into `táasks ` — the same shape as every symptom above.
+
+**This is the general case of "Do NOT let plain keystrokes bypass the
+synthetic channel"** (see "Duplicate key-down" above): that entry already
+proved unconditional suppression is required because cross-callback
+ordering isn't guaranteed — a passed-through letter can overtake Backspaces
+a previous callback posted. The `noop` short-circuit was a second, narrower
+way to violate the same rule, reachable even though nobody was trying to
+"optimize" passthrough this time — it fell out of treating an edit's
+emptiness as a proxy for the engine's ownership, which isn't the same
+question.
+
+**Symmetric bug on Backspace.** `.backspace` had the identical flaw: with a
+composing word already containing an absorbed, invisible key (as above), a
+Backspace deleting exactly that key is also a no-op edit — the engine has
+nothing to render differently — but under the old logic that meant
+UNSUPPRESSED, so the physical Delete key reached the app and deleted a real,
+VISIBLE character the engine never intended to touch.
+
+**Why the tests never caught it.** `EngineControllerTests`' `typeAndFlush`
+(and the same pattern duplicated in `LexiconRestoreTests` and
+`LexiconRealDictionaryTests`) reconstructed the on-screen text purely by
+replaying `EngineController`'s returned edits, in call order — it never
+modeled the physical key that reaches the app when `suppress` is `false`.
+So a test harness driving the exact code path that leaks a character was
+structurally blind to that leak: it only ever saw the edits, never the extra
+character the OS delivered on the side. The real tap
+(`EventTapController.handle`) applies both, in order — inject the edit, THEN
+let the original event through if unsuppressed — which is exactly what let
+this bug ship invisibly under a passing test suite.
+
+**Fix.**
+- **Test harness first** (`Tests/KeystoneInputTests/RealisticTyping.swift`,
+  new, shared by the three files above): `applyRealistically` applies an
+  edit and then, only if `suppress` is `false`, the physical key itself —
+  appending a `.character`'s letter, or removing one character for an
+  unsuppressed `.backspace`. `commitPassthrough`/`commitNewline`
+  (Return/Tab/arrows) still contribute nothing to the simulated screen: the
+  physical key there is a navigation/newline key with no text content these
+  string-comparison tests represent (Return's own `"\r"` is deliberately not
+  appended). `typeInactive` (English-mode macros, Vietnamese off) already
+  modeled physical passthrough correctly and was left alone.
+- **`EngineController.handle`, ACTIVE branch** (`Sources/KeystoneInput/
+  EngineController.swift`): `.character` now suppresses UNCONDITIONALLY —
+  reading `process(.character)`'s call sites in `Engine.process` shows the
+  engine always takes ownership of a character while active, either
+  appending it to `rawKeys` (rendering visibly or not) or handing it back
+  embedded in a real edit (empty buffer, or a commit boundary always
+  appends the boundary char to the edit's text) — there is no active
+  `.character` path where the engine leaves a key for the app to handle on
+  its own. `.backspace` suppresses iff the engine was already composing a
+  word (`Engine.isComposing`, checked BEFORE calling `process`, since
+  `process` itself mutates `rawKeys`): an empty buffer means Backspace was
+  never the engine's to take, so it stays a normal passthrough Delete;
+  a non-empty buffer means the engine owns this Backspace regardless of
+  whether the re-render is visible.
+- **`Engine.isComposing`** (`Sources/KeystoneEngine/Engine.swift`): a tiny
+  `public var isComposing: Bool { !rawKeys.isEmpty }` — read-only, no I/O,
+  keeps `Engine` pure. The one new surface `EngineController` needed and
+  didn't already have.
+
+**Verified no other state leaves `rawKeys` non-empty while expecting a
+physical key.** Read the whole of `Engine.swift` (`process`, `rerender`,
+`finalize`, `flush`/`flushNewline`, macro handling, VNI digits via
+`isWordChar`) looking for a path where the engine takes a character but
+still wants the physical key delivered by the app — none exists; every
+active `.character` outcome above is accounted for. `.backspace` on empty
+`rawKeys` (`return .none` in `Engine.process`) is the one legitimate
+passthrough case, and it's exactly what `isComposing` gates on.
+
+**Test count.** 129 → 134 `@Test` declarations in `KeystoneInputTests`
+(the harness refactor changed no test's identity, only its body); the 5 new
+declarations cover 249 additional individual cases: the four bug-report
+words with and without a lexicon, a Backspace-on-absorbed-key regression
+(`servers`/`corners`/`borders`/`workers`, each with the trailing letter
+dropped), 114 Telex→Vietnamese pairs pulled from the engine's own JSON
+corpus and re-verified end-to-end through `EngineController`, and 123 plain
+English words (including plurals shaped like the bug report: `masks`,
+`risks`, `crashes`, `baskets`, ...) that must commit unchanged with no
+lexicon installed. All were RED against the fixed harness and the
+pre-fix `EngineController`; all are GREEN after the fix, alongside the full
+pre-existing suite (`KeystoneEngineTests`: 132/132 unaffected — this bug
+lives entirely in `EngineController`, not `Engine`).
