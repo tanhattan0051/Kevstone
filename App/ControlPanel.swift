@@ -6,6 +6,7 @@
 import SwiftUI
 import AppKit
 import KeystoneEngine
+import KeystoneInput
 
 enum ControlPanelTab: String, CaseIterable, Identifiable {
     case basic, macros, system, about
@@ -62,6 +63,12 @@ struct ControlPanel: View {
 
 private struct BasicPane: View {
     @Bindable var model: AppModel
+    /// True while the "Phím kèm:" recorder is armed and waiting for the next
+    /// keyDown; drives the button's "Bấm phím…" label.
+    @State private var isRecordingKey = false
+    /// The local monitor installed while recording — removed as soon as a
+    /// key is captured, Escape cancels, or the pane disappears.
+    @State private var keyRecorderMonitor: Any?
 
     var body: some View {
         Form {
@@ -111,17 +118,126 @@ private struct BasicPane: View {
             }
 
             Section("Phím & gửi phím") {
-                Picker("Phím chuyển:", selection: $model.switchKeyModifier) {
-                    ForEach(SwitchKeyModifier.allCases) { Text($0.label).tag($0) }
+                Toggle("Bật phím chuyển", isOn: $model.switchKeyEnabled)
+
+                HStack(spacing: 16) {
+                    Toggle("⌃ Control", isOn: modifierBinding(.control))
+                    Toggle("⌥ Option", isOn: modifierBinding(.option))
+                    Toggle("⇧ Shift", isOn: modifierBinding(.shift))
+                    Toggle("⌘ Command", isOn: modifierBinding(.command))
                 }
-                Text("Nhấn tổ hợp phím này (không kèm phím khác) để bật/tắt tiếng Việt.")
+                .toggleStyle(.checkbox)
+                .disabled(!model.switchKeyEnabled)
+
+                HStack {
+                    Text("Phím kèm:")
+                    Button(isRecordingKey ? "Bấm phím…" : (model.switchHotKey.key?.label ?? "(không có)")) {
+                        startRecordingKey()
+                    }
+                    .disabled(!model.switchKeyEnabled || isRecordingKey)
+                    if model.switchHotKey.key != nil {
+                        Button("Xoá") { clearRecordedKey() }
+                            .disabled(!model.switchKeyEnabled)
+                    }
+                }
+
+                Toggle("Kêu bíp khi chuyển", isOn: $model.switchKeyBeep)
+                    .disabled(!model.switchKeyEnabled)
+
+                // The combo ACTUALLY live, not the (possibly invalid, not
+                // yet applied) draft above — so an in-progress bad edit never
+                // hides a hot key that's still working. See AppModel
+                // .appliedSwitchHotKey / DECISIONS.md "Phím chuyển".
+                Text("Tổ hợp hiện tại: \(model.appliedSwitchHotKey?.displayString ?? "(chưa đặt)")")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+
+                if let error = model.switchKeyError {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                }
+
+                Text("⌃Space đang được macOS dùng để đổi nguồn nhập — muốn dùng thì tắt trong System Settings → Keyboard → Keyboard Shortcuts → Input Sources.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
                 Toggle("Gửi từng phím (bật nếu bị lỗi)", isOn: $model.sendEachKeystroke)
             }
         }
         .formStyle(.grouped)
         .navigationTitle("Cơ bản")
+        // A recording monitor left running after the pane closes would
+        // consume every keyDown in the app forever — always tear it down.
+        .onDisappear { stopRecordingKey() }
+    }
+
+    /// A two-way `Bool` binding onto one bit of `model.switchHotKey.modifiers`,
+    /// so the four checkboxes can bind directly without four near-identical
+    /// custom `Binding` literals inline in `body`.
+    private func modifierBinding(_ modifier: ModifierSet) -> Binding<Bool> {
+        Binding(
+            get: { model.switchHotKey.modifiers.contains(modifier) },
+            set: { isOn in
+                var hotKey = model.switchHotKey
+                if isOn { hotKey.modifiers.insert(modifier) } else { hotKey.modifiers.remove(modifier) }
+                model.switchHotKey = hotKey
+            }
+        )
+    }
+
+    /// The Control Panel's own window at the moment recording started — the
+    /// recorder only ever consumes a keyDown that belongs to THIS window
+    /// (see `startRecordingKey`).
+    @State private var recordingWindow: NSWindow?
+
+    /// Arms the "Phím kèm:" recorder: a LOCAL monitor (still app-wide — a
+    /// local monitor can't be scoped to one window — but filtered to consume
+    /// only a keyDown belonging to the Control Panel window itself) that
+    /// captures the very next such keyDown (`return nil`, so it never reaches
+    /// the Control Panel) and stores it on `model.switchHotKey.key`. Escape
+    /// cancels — captured as "the next key", like any other, but deliberately
+    /// discarded rather than recorded. A keyDown belonging to a DIFFERENT
+    /// Keystone window (e.g. "Chuyển mã"/"Gõ tắt", opened while this pane is
+    /// merely still in the view hierarchy and not visible, so `onDisappear`
+    /// hasn't fired) is passed through untouched instead of being swallowed.
+    ///
+    /// `model.beginSwitchKeyRecording()` suspends the Vietnamese engine for
+    /// the duration: with it active, a plain key is suppressed and
+    /// re-synthesized as a DIFFERENT event (keyCode 0) before this monitor
+    /// ever sees it, so the recorder would capture the wrong key — see
+    /// `AppModel.beginSwitchKeyRecording()`/DECISIONS.md.
+    private func startRecordingKey() {
+        guard !isRecordingKey else { return }
+        isRecordingKey = true
+        recordingWindow = NSApp.keyWindow
+        model.beginSwitchKeyRecording()
+        keyRecorderMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown]) { event in
+            guard event.window === recordingWindow else { return event }
+            defer { stopRecordingKey() }
+            guard event.keyCode != 53 else { return nil }   // Escape cancels
+            var hotKey = model.switchHotKey
+            hotKey.key = SwitchHotKey.Key(
+                keyCode: UInt16(event.keyCode),
+                label: SwitchHotKey.keyLabel(forKeyCode: UInt16(event.keyCode), characters: event.charactersIgnoringModifiers ?? "")
+            )
+            model.switchHotKey = hotKey
+            return nil
+        }
+    }
+
+    private func stopRecordingKey() {
+        if let monitor = keyRecorderMonitor { NSEvent.removeMonitor(monitor) }
+        keyRecorderMonitor = nil
+        recordingWindow = nil
+        if isRecordingKey { model.endSwitchKeyRecording() }
+        isRecordingKey = false
+    }
+
+    private func clearRecordedKey() {
+        var hotKey = model.switchHotKey
+        hotKey.key = nil
+        model.switchHotKey = hotKey
     }
 }
 

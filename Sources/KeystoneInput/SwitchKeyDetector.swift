@@ -12,7 +12,7 @@
 /// The modifier keys `SwitchKeyDetector` can watch for, independent of
 /// AppKit's `NSEvent.ModifierFlags` so this module stays platform-neutral and
 /// unit-testable headless.
-public struct ModifierSet: OptionSet, Sendable, Equatable {
+public struct ModifierSet: OptionSet, Sendable, Equatable, Codable {
     public let rawValue: Int
 
     public init(rawValue: Int) {
@@ -41,6 +41,16 @@ public struct SwitchKeyDetector: Sendable {
     /// out-of-target modifier doesn't re-cancel-then-fire, but it won't fire
     /// on release anymore.
     private var cancelled = false
+    /// True from the moment ANY modifier outside `target` or any real key has
+    /// been seen during the CURRENT hold — i.e. since `active` was last fully
+    /// empty. Unlike `cancelled` (which only matters once armed), this is
+    /// sticky for the whole hold and blocks arming in the first place: a
+    /// chord that starts as a larger superset of `target` and later shrinks
+    /// down to exactly `target` (e.g. ⌘⇧Z with target=[.shift], releasing ⌘
+    /// first) must never look "clean" just because `active` happens to equal
+    /// `target` again before the final release. Cleared only when `active`
+    /// becomes empty (a full release starts a fresh hold).
+    private var dirty = false
 
     public init(target: ModifierSet? = nil) {
         self.target = target
@@ -53,20 +63,31 @@ public struct SwitchKeyDetector: Sendable {
         guard let target, !target.isEmpty else {
             armed = false
             cancelled = false
-            return false
-        }
-
-        if active == target {
-            armed = true
-            cancelled = false
+            dirty = false
             return false
         }
 
         if active.isEmpty {
-            let fire = armed && !cancelled
+            let fire = armed && !cancelled && !dirty
             armed = false
             cancelled = false
+            dirty = false
             return fire
+        }
+
+        if !active.isSubset(of: target) {
+            // A modifier outside `target` is part of this hold — taints the
+            // WHOLE hold, even after it's released and `active` shrinks back
+            // down to exactly `target`.
+            dirty = true
+        }
+
+        if active == target {
+            if !dirty {
+                armed = true
+                cancelled = false
+            }
+            return false
         }
 
         // Non-empty and not an exact match to `target`.
@@ -81,10 +102,13 @@ public struct SwitchKeyDetector: Sendable {
         return false
     }
 
-    /// Feed every `.keyDown` (a real, non-modifier key) event. Cancels the
-    /// in-progress chord so ordinary shortcuts (e.g. Ctrl+Shift+C) never fire
-    /// the switch.
+    /// Feed every `.keyDown` (a real, non-modifier key) event, and every
+    /// other non-chord input that shouldn't be mistaken for a clean chord
+    /// (e.g. a modifier-click — see `AppModel.handleSwitchKeyEvent`). Cancels
+    /// an already-armed chord and taints the rest of the current hold so it
+    /// can never arm later either (see `dirty`).
     public mutating func otherKeyPressed() {
+        dirty = true
         if armed { cancelled = true }
     }
 }

@@ -110,8 +110,11 @@ Cùng với **self-tag** chống xử lý lại chính event mình sinh ra, **kh
 
 ### Phím tắt & tiện ích hệ thống
 
-- **Phím chuyển Việt/Anh:** `⌃⇧` *(mặc định)*, hoặc `⌥⇧` · `⌘⇧` · `⌃⌥` · Tắt. Nhận diện bằng máy
-  trạng thái riêng (ngoài hot path), có phím khác chen vào là huỷ để tránh trùng shortcut.
+- **Phím chuyển Việt/Anh:** tổ hợp tự đặt — bất kỳ phím bổ trợ nào, kể cả MỘT phím bổ trợ đơn lẻ
+  (⌃ ⌥ ⇧ ⌘, mặc định `⌃⇧`), kèm thêm một phím thật nếu muốn (ví dụ `⌃⌥Space`). Chỉ phím bổ trợ dùng
+  máy trạng thái riêng (ngoài hot path), có phím khác hoặc click chuột chen vào là huỷ để tránh
+  trùng thao tác thường dùng (shift-click, ⌘-click…); có kèm phím thì đăng ký hẳn với hệ thống
+  (Carbon) để phím đó không lọt ra ứng dụng khác. Kêu bíp khi chuyển *(tuỳ chọn, mặc định tắt)*.
 - **Chỉ báo V/E** ngay trên menu bar.
 - **Khởi động cùng macOS** *(mặc định tắt, `SMAppService`)*, **hiện icon trên Dock** *(mặc định
   tắt)*, **mở Bảng điều khiển khi khởi động** *(mặc định tắt)*.

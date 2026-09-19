@@ -28,37 +28,6 @@ import ServiceManagement
 import KeystoneEngine
 import KeystoneInput
 
-/// OpenKey's "Phím chuyển" (switch-language hot key): a modifier-only combo
-/// that toggles Vietnamese input on/off when pressed and released cleanly,
-/// with no other key in between (see `SwitchKeyDetector`). `.off` disables
-/// it entirely.
-enum SwitchKeyModifier: String, CaseIterable, Identifiable, Codable {
-    case controlShift, optionShift, commandShift, controlOption, off
-
-    var id: String { rawValue }
-
-    var label: String {
-        switch self {
-        case .controlShift: return "⌃ ⇧"
-        case .optionShift:  return "⌥ ⇧"
-        case .commandShift: return "⌘ ⇧"
-        case .controlOption: return "⌃ ⌥"
-        case .off: return "Tắt"
-        }
-    }
-
-    /// The chord `SwitchKeyDetector` should watch for. `nil` disables it.
-    var chord: ModifierSet? {
-        switch self {
-        case .controlShift: return [.control, .shift]
-        case .optionShift:  return [.option, .shift]
-        case .commandShift: return [.command, .shift]
-        case .controlOption: return [.control, .option]
-        case .off: return nil
-        }
-    }
-}
-
 private extension ModifierSet {
     /// Maps AppKit's modifier flags to the platform-neutral `ModifierSet`
     /// that `SwitchKeyDetector` (KeystoneInput) works with.
@@ -296,13 +265,55 @@ final class AppModel {
         }
     }
 
-    /// "Phím chuyển:"
-    var switchKeyModifier: SwitchKeyModifier = AppModel.loadRaw(Keys.switchKeyModifier, default: .controlShift) {
+    /// "Phím chuyển" — the recorded combo itself (modifiers, optionally plus
+    /// one key). JSON-encoded under a NEW UserDefaults key; on first launch
+    /// after upgrading (that key absent) this and `switchKeyEnabled` are both
+    /// seeded from the legacy `SwitchKeyModifier` raw string via
+    /// `SwitchHotKey.migrateLegacy`. See `AppModel.loadSwitchHotKeyState()`.
+    var switchHotKey: SwitchHotKey = AppModel.loadSwitchHotKeyState().hotKey {
         didSet {
-            UserDefaults.standard.set(switchKeyModifier.rawValue, forKey: Keys.switchKeyModifier)
-            switchDetector.target = switchKeyModifier.chord
+            // Persisting happens inside `applySwitchHotKeyRegistration()`
+            // itself, ONLY once a combo is actually applied (valid, and —
+            // for a modifier+key combo — successfully registered with
+            // Carbon). An in-progress invalid or unregistrable draft must
+            // never overwrite the last combo that really works, or a
+            // relaunch mid-edit would lose it. See DECISIONS.md.
+            applySwitchHotKeyRegistration()
         }
     }
+
+    /// "Bật phím chuyển" — master on/off, independent of the SwitchKeyModifier
+    /// enum's old `.off` case (which conflated "off" with "which combo to
+    /// remember for next time").
+    var switchKeyEnabled: Bool = AppModel.loadSwitchHotKeyState().isEnabled {
+        didSet {
+            UserDefaults.standard.set(switchKeyEnabled, forKey: Keys.switchKeyEnabled)
+            applySwitchHotKeyRegistration()
+        }
+    }
+
+    /// "Kêu bíp khi chuyển" — default OFF (silent toggle, matching the
+    /// feature's original behavior; this is purely an opt-in audible cue).
+    var switchKeyBeep: Bool = AppModel.loadBool(Keys.switchKeyBeep, default: false) {
+        didSet { UserDefaults.standard.set(switchKeyBeep, forKey: Keys.switchKeyBeep) }
+    }
+
+    /// Vietnamese message for the red caption in the Control Panel: either
+    /// `switchHotKey.validationError` (an illegal combo — nothing was
+    /// applied) or a Carbon `RegisterEventHotKey` failure (a legal combo the
+    /// OS/another app already claimed). `nil` once the live combo matches
+    /// `switchHotKey`/`switchKeyEnabled` with no error. Set only from
+    /// `applySwitchHotKeyRegistration()`.
+    private(set) var switchKeyError: String?
+
+    /// The combo actually live right now — set only when
+    /// `applySwitchHotKeyRegistration()` successfully applies `switchHotKey`
+    /// (modifier-only, or a Carbon-registered modifier+key combo); `nil`
+    /// while disabled. Distinct from `switchHotKey` itself, which is the
+    /// in-progress draft the Control Panel edits and may be temporarily
+    /// invalid or fail to register — read by its "Tổ hợp hiện tại" caption so
+    /// a bad draft never hides a hot key that is still actually live.
+    private(set) var appliedSwitchHotKey: SwitchHotKey?
 
     /// "Cho phép gõ tắt" (Gõ tắt tab)
     var macrosEnabled: Bool = AppModel.loadBool(Keys.macrosEnabled, default: false) {
@@ -415,13 +426,18 @@ final class AppModel {
     private var startAttempts = 0
     private var appSwitchObserver: NSObjectProtocol?
 
-    // MARK: - Phím chuyển (switch-language hot key, Phase 4)
+    // MARK: - Phím chuyển (switch-language hot key, Phase 4/7)
 
     /// Pure modifier-only chord detector — fed by the `NSEvent` monitors
     /// below, deliberately off the CGEventTap hot path (see DECISIONS.md).
+    /// Live only while `switchHotKey.key == nil` (modifier-only combo); a
+    /// modifier+key combo goes through `hotKeyRegistrar` instead.
     private var switchDetector = SwitchKeyDetector()
     private var switchKeyGlobalMonitor: Any?
     private var switchKeyLocalMonitor: Any?
+    /// Carbon `RegisterEventHotKey` wrapper for the modifier+key path — see
+    /// `App/SwitchHotKeyRegistrar.swift` and DECISIONS.md "Phím chuyển".
+    private let hotKeyRegistrar = SwitchHotKeyRegistrar()
 
     // MARK: - System toggle bookkeeping (Phase 4)
 
@@ -503,7 +519,13 @@ final class AppModel {
     func bootstrap() {
         pushInputBehavior()   // push whatever was loaded from UserDefaults above
         reconcileLoginItemStatus()
-        switchDetector.target = switchKeyModifier.chord
+        hotKeyRegistrar.onHotKeyPressed = { [weak self] in
+            // Carbon delivers this on the main run loop, but the closure
+            // itself isn't statically @MainActor-isolated — hop the same way
+            // the app-activation observer below does, rather than assuming.
+            Task { @MainActor in self?.toggleVietnameseFromHotKey() }
+        }
+        applySwitchHotKeyRegistration()
         installSwitchKeyMonitors()
         // Re-push EngineConfig whenever macros are added/edited/imported, so
         // the running tap picks up the new rules without a restart.
@@ -542,6 +564,7 @@ final class AppModel {
         if let o = appSwitchObserver { NSWorkspace.shared.notificationCenter.removeObserver(o) }
         if let m = switchKeyGlobalMonitor { NSEvent.removeMonitor(m) }
         if let m = switchKeyLocalMonitor { NSEvent.removeMonitor(m) }
+        hotKeyRegistrar.unregister()
     }
 
     func requestAccessibility() {
@@ -655,7 +678,9 @@ final class AppModel {
         rememberCodePerApp = true
         autoFixSuggestion = false
         sendEachKeystroke = false
-        switchKeyModifier = .controlShift
+        switchHotKey = SwitchHotKey(modifiers: [.control, .shift])
+        switchKeyEnabled = true
+        switchKeyBeep = false
         macrosEnabled = false
         macrosExpandWhenVietnameseOff = false
         macroAutoCapitalize = true
@@ -722,6 +747,19 @@ final class AppModel {
     /// needs Accessibility to observe other apps' events — already required
     /// for the tap itself — so if it isn't granted yet the hot key simply
     /// won't fire globally; nothing here crashes either way.
+    /// Event types the switch-key monitors watch: modifier changes and real
+    /// keys as before, PLUS mouse-down events. A modifier-only target can now
+    /// be a single modifier (⇧, ⌥ or ⌘ alone — Phase 7), and a bare click
+    /// while holding one of those is an everyday gesture (shift-click to
+    /// extend a selection, ⌘-click to open in a new tab, ⌥-click). Without
+    /// this, releasing the modifier after such a click looks exactly like a
+    /// clean chord release and spuriously toggles Vietnamese. Feeding mouse
+    /// events into `otherKeyPressed()` — same as a real keyDown — cancels
+    /// that. See DECISIONS.md "Phím chuyển".
+    private static let switchKeyMonitoredEvents: NSEvent.EventTypeMask = [
+        .flagsChanged, .keyDown, .leftMouseDown, .rightMouseDown, .otherMouseDown,
+    ]
+
     private func installSwitchKeyMonitors() {
         // These monitors are delivered on the main thread, so handle them
         // SYNCHRONOUSLY (assumeIsolated) rather than hopping through a Task:
@@ -729,12 +767,12 @@ final class AppModel {
         // could reorder a cancelling keyDown after the releasing flagsChanged
         // and fire a spurious toggle. NSEvent isn't Sendable, so pull the
         // plain data out before touching the main-actor detector.
-        switchKeyGlobalMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.flagsChanged, .keyDown]) { [weak self] event in
+        switchKeyGlobalMonitor = NSEvent.addGlobalMonitorForEvents(matching: Self.switchKeyMonitoredEvents) { [weak self] event in
             let type = event.type
             let modifiers = ModifierSet(nsEventFlags: event.modifierFlags)
             MainActor.assumeIsolated { self?.handleSwitchKeyEvent(type: type, modifiers: modifiers) }
         }
-        switchKeyLocalMonitor = NSEvent.addLocalMonitorForEvents(matching: [.flagsChanged, .keyDown]) { [weak self] event in
+        switchKeyLocalMonitor = NSEvent.addLocalMonitorForEvents(matching: Self.switchKeyMonitoredEvents) { [weak self] event in
             let type = event.type
             let modifiers = ModifierSet(nsEventFlags: event.modifierFlags)
             MainActor.assumeIsolated { self?.handleSwitchKeyEvent(type: type, modifiers: modifiers) }
@@ -743,18 +781,114 @@ final class AppModel {
     }
 
     /// Shared handler for both "Phím chuyển" monitors: feeds `switchDetector`
-    /// and flips `enabled` on a clean chord press-then-release.
+    /// and flips `enabled` on a clean chord press-then-release. A keyDown or
+    /// a mouse-down both count as "something else happened during this hold"
+    /// — see `Self.switchKeyMonitoredEvents`.
     @MainActor
     private func handleSwitchKeyEvent(type: NSEvent.EventType, modifiers: ModifierSet) {
         switch type {
         case .flagsChanged:
             if switchDetector.flagsChanged(active: modifiers) {
-                enabled.toggle()
+                toggleVietnameseFromHotKey()
             }
-        case .keyDown:
+        case .keyDown, .leftMouseDown, .rightMouseDown, .otherMouseDown:
             switchDetector.otherKeyPressed()
         default:
             break
+        }
+    }
+
+    /// Flips `enabled` and, iff `switchKeyBeep` is on, plays the system
+    /// beep — shared by both "Phím chuyển" firing paths (the
+    /// `SwitchKeyDetector` chord above, and `hotKeyRegistrar`'s Carbon
+    /// callback wired in `bootstrap()`).
+    @MainActor
+    private func toggleVietnameseFromHotKey() {
+        enabled.toggle()
+        if switchKeyBeep { NSSound.beep() }
+    }
+
+    /// Suspends the tap's Vietnamese engine WITHOUT touching `enabled` (the
+    /// persisted, user-facing toggle) — call while the "Phím kèm:" recorder
+    /// in the Control Panel is armed. With the engine active, a plain
+    /// character key is unconditionally suppressed and re-synthesized on a
+    /// NEW event with `virtualKey 0` (see `EngineController.handle`/
+    /// `TapSink.postText`); the recorder's local monitor would then capture
+    /// THAT synthetic event — keyCode 0, and a label built from whatever the
+    /// engine transformed the key into — instead of the physical key the
+    /// user actually pressed. Suspending the engine for the recorder's brief
+    /// one-keystroke window makes every key pass through untouched, so the
+    /// recorder always sees the real keyCode/characters. See DECISIONS.md
+    /// "Phím chuyển".
+    func beginSwitchKeyRecording() {
+        controller.setActive(false)
+    }
+
+    /// Restores the engine to whatever `enabled` currently is (not
+    /// unconditionally `true`) once the recorder has captured a key or been
+    /// cancelled — pairs with `beginSwitchKeyRecording()`.
+    func endSwitchKeyRecording() {
+        controller.setActive(enabled)
+    }
+
+    /// Applies `switchHotKey`/`switchKeyEnabled` to whichever live mechanism
+    /// the combo needs: a modifier-only combo arms `switchDetector`
+    /// (NSEvent monitors, off the tap); a modifier+key combo registers a
+    /// Carbon hot key instead (`hotKeyRegistrar`), since only Carbon can
+    /// consume the key outright. Disabled → both are torn down, checked
+    /// FIRST, before validation — turning "Bật phím chuyển" off must tear
+    /// down whatever is live even while the in-progress draft is invalid
+    /// (e.g. every modifier box unchecked mid-edit); otherwise the last valid
+    /// combo would keep firing while the UI shows the feature off.
+    ///
+    /// An invalid combo (`switchHotKey.validationError != nil`) is never
+    /// applied: this returns, leaving whichever mechanism (and
+    /// `appliedSwitchHotKey`) was last successfully applied still running, so
+    /// a bad in-progress edit in the Control Panel never drops a working hot
+    /// key. The reason is surfaced via `switchKeyError` either way (the UI's
+    /// red caption).
+    ///
+    /// `switchHotKey` is persisted (`AppModel.saveSwitchHotKey`) ONLY on the
+    /// two success paths below — never for an invalid draft, and never for a
+    /// key combo that failed to register — so a relaunch always finds the
+    /// last combo that actually worked, not a half-finished edit. See
+    /// DECISIONS.md "Phím chuyển".
+    private func applySwitchHotKeyRegistration() {
+        guard switchKeyEnabled else {
+            switchKeyError = nil
+            switchDetector.target = nil
+            hotKeyRegistrar.unregister()
+            appliedSwitchHotKey = nil
+            return
+        }
+        if let error = switchHotKey.validationError {
+            switchKeyError = error
+            return
+        }
+        if let key = switchHotKey.key {
+            do {
+                // Register the NEW combo before touching `switchDetector`:
+                // if this throws (e.g. `eventHotKeyExistsErr`), a hot key
+                // that was live via the modifier-only path must stay live
+                // rather than being cleared out from under a failed change.
+                try hotKeyRegistrar.register(carbonModifiers: switchHotKey.modifiers.carbonModifierMask, keyCode: key.keyCode)
+                switchDetector.target = nil
+                switchKeyError = nil
+                appliedSwitchHotKey = switchHotKey
+                AppModel.saveSwitchHotKey(switchHotKey)
+            } catch let error as SwitchHotKeyRegistrar.RegistrationError {
+                Self.log.error("RegisterEventHotKey failed: OSStatus \(error.status, privacy: .public) for combo \(self.switchHotKey.displayString, privacy: .public)")
+                switchKeyError = "Tổ hợp này đang được hệ thống hoặc app khác dùng"
+            } catch {
+                Self.log.error("RegisterEventHotKey failed: \(error.localizedDescription, privacy: .public)")
+                switchKeyError = "Tổ hợp này đang được hệ thống hoặc app khác dùng"
+            }
+        } else {
+            hotKeyRegistrar.unregister()
+            switchDetector.target = switchHotKey.modifiers
+            switchKeyError = nil
+            appliedSwitchHotKey = switchHotKey
+            AppModel.saveSwitchHotKey(switchHotKey)
         }
     }
 
@@ -833,7 +967,12 @@ final class AppModel {
         static let rememberCodePerApp = "settings.rememberCodePerApp"
         static let autoFixSuggestion = "settings.autoFixSuggestion"
         static let sendEachKeystroke = "settings.sendEachKeystroke"
-        static let switchKeyModifier = "settings.switchKeyModifier"
+        /// Retired `SwitchKeyModifier` raw string — read-only now, only for
+        /// `loadSwitchHotKeyState()`'s one-time migration. Never written.
+        static let switchKeyModifierLegacy = "settings.switchKeyModifier"
+        static let switchHotKey = "settings.switchHotKey"
+        static let switchKeyEnabled = "settings.switchKeyEnabled"
+        static let switchKeyBeep = "settings.switchKeyBeep"
         static let macrosEnabled = "settings.macrosEnabled"
         static let macrosExpandWhenVietnameseOff = "settings.macrosExpandWhenVietnameseOff"
         static let macroAutoCapitalize = "settings.macroAutoCapitalize"
@@ -851,5 +990,67 @@ final class AppModel {
     private static func loadRaw<T: RawRepresentable>(_ key: String, default def: T) -> T where T.RawValue == String {
         guard let raw = UserDefaults.standard.string(forKey: key) else { return def }
         return T(rawValue: raw) ?? def
+    }
+
+    /// Loads `(switchHotKey, switchKeyEnabled)`. The two halves are resolved
+    /// INDEPENDENTLY, not as one all-or-nothing migration result — a legacy
+    /// upgrade only ever produces both together, but `Keys.switchKeyEnabled`
+    /// gets its own write on every toggle from then on (see
+    /// `switchKeyEnabled`'s `didSet`), and it must win whenever it exists,
+    /// regardless of which branch supplied the combo:
+    ///   - `hotKey`: the NEW `Keys.switchHotKey` JSON if present and it
+    ///     decodes to a *valid* combo; otherwise the legacy
+    ///     `SwitchKeyModifier` raw string's migrated combo (⌃⇧ if that, too,
+    ///     was never written).
+    ///   - `isEnabled`: `Keys.switchKeyEnabled` if that key has EVER been
+    ///     written (`UserDefaults.object(forKey:)`, not `bool(forKey:)`, so a
+    ///     stored `false` isn't confused with "never written"); only when it
+    ///     is truly absent does this fall back to the legacy raw string's
+    ///     migrated `isEnabled`.
+    /// Without this split, a user who only ever toggled "Bật phím chuyển"
+    /// (never touched the combo, so `Keys.switchHotKey` stays unwritten)
+    /// would have that on/off choice silently discarded on every relaunch —
+    /// the migration branch used to return its own `isEnabled` unconditionally.
+    /// Called twice at property-initializer time (once for each property);
+    /// both reads are cheap and pure, so the duplication costs nothing worth
+    /// caching.
+    private static func loadSwitchHotKeyState() -> (hotKey: SwitchHotKey, isEnabled: Bool) {
+        let defaults = UserDefaults.standard
+        let legacyMigration = { SwitchHotKey.migrateLegacy(rawValue: defaults.string(forKey: Keys.switchKeyModifierLegacy)) }
+
+        var hotKey = legacyMigration().hotKey
+        if let data = defaults.data(forKey: Keys.switchHotKey) {
+            do {
+                let decoded = try JSONDecoder().decode(SwitchHotKey.self, from: data)
+                if let error = decoded.validationError {
+                    log.error("Saved switchHotKey is invalid (\(error, privacy: .public)); using the legacy/default combo")
+                } else {
+                    hotKey = decoded
+                }
+            } catch {
+                log.error("Saved switchHotKey could not be decoded (\(error.localizedDescription, privacy: .public)); using the legacy/default combo")
+            }
+        }
+
+        let isEnabled: Bool
+        if let storedEnabled = defaults.object(forKey: Keys.switchKeyEnabled) as? Bool {
+            isEnabled = storedEnabled
+        } else {
+            isEnabled = legacyMigration().isEnabled
+        }
+
+        return (hotKey, isEnabled)
+    }
+
+    private static func saveSwitchHotKey(_ hotKey: SwitchHotKey) {
+        guard let data = try? JSONEncoder().encode(hotKey) else {
+            // Should be unreachable (SwitchHotKey is a plain Codable value
+            // type with no failable fields), but this is user-settings
+            // persistence, not the tap hot path — log rather than crash or
+            // silently drop.
+            Self.log.error("Failed to JSON-encode switchHotKey for persistence")
+            return
+        }
+        UserDefaults.standard.set(data, forKey: Keys.switchHotKey)
     }
 }

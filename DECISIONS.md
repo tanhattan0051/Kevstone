@@ -579,10 +579,13 @@ real permission dialog to exercise. Verified by `swift build` staying clean
 and by the existing engine/input suites staying green (68 + 36 tests) — no
 fabricated unit tests were added for this UI layer.
 
-## Phím chuyển / switch-language hotkey (Phase 4)
+## Phím chuyển / switch-language hotkey (Phase 4, custom combos in Phase 7)
 
 Resolves the `switchKeyModifier` scaffolding left in the Phase 4 system-
 toggles work ("Phím chuyển:" picker with no hot key actually registered).
+Phase 7 then replaced the fixed four-chord picker with a user-recordable
+combo — any modifiers, optionally plus one real key — see "Custom combos"
+below for what changed and why.
 
 **Modifier-only chord, detected via a pure `SwitchKeyDetector`.** OpenKey's
 "Phím chuyển" isn't a single key — it's a chord like Ctrl+Shift that toggles
@@ -596,28 +599,32 @@ modifier set exactly matches `target`, fires `true` only when the set then
 returns to empty while still armed and not cancelled, and `otherKeyPressed()`
 (fed from `.keyDown`) cancels an armed chord — so does any modifier joining
 the chord that isn't part of `target` (e.g. Command joining a Ctrl+Shift
-chord). Pinned by `Tests/KeystoneInputTests/SwitchKeyDetectorTests.swift`.
+chord). `target` was originally one of four fixed chords (Phase 4); Phase 7
+lets it be ANY non-empty `ModifierSet`, so the detector logic itself needed
+no change — only more `target` values to test with (`ModifierSet` targets:
+single modifier, three modifiers, ⌥⌘). Pinned by `Tests/KeystoneInputTests/
+SwitchKeyDetectorTests.swift`.
 
 **`ModifierSet`, not `NSEvent.ModifierFlags`, at the detector boundary.** The
 detector lives in `KeystoneInput`, which has no AppKit dependency and must
 stay unit-testable headless — same constraint as every other pure type in
 `Contracts.swift`. `App/AppModel.swift` maps `NSEvent.modifierFlags` to
-`ModifierSet` at the edge (`ModifierSet(nsEventFlags:)`), right next to the
-existing `SwitchKeyModifier.chord` mapping.
+`ModifierSet` at the edge (`ModifierSet(nsEventFlags:)`).
 
 **`NSEvent` global + local monitors, deliberately NOT the CGEventTap.** The
 tap is this project's most stability-critical code and this feature has no
 business anywhere near its hot path — a bug here must never be able to wedge
-every keystroke in every app. So "Phím chuyển" is wired entirely through
-AppKit `NSEvent.addGlobalMonitorForEvents`/`addLocalMonitorForEvents`
+every keystroke in every app. So the modifier-only path is wired entirely
+through AppKit `NSEvent.addGlobalMonitorForEvents`/`addLocalMonitorForEvents`
 (`matching: [.flagsChanged, .keyDown]`) in `AppModel.bootstrap()`/
 `shutdown()`, independent of `EventTapController`. The global monitor is what
 lets the chord fire while some other app is frontmost; like the tap, it needs
 Accessibility to see other apps' events, but unlike the tap its absence is
 harmless — the hot key just doesn't fire globally yet, no crash, no
 degraded typing. The local monitor covers Keystone's own windows and must
-return the event unmodified (`return event`) — this feature only ever reads
-modifier/key events, never consumes them.
+return the event unmodified (`return event`) — this path only ever reads
+modifier/key events, never consumes them. (The modifier+key path is
+different — see "Custom combos" below.)
 
 **Concurrency: extract-then-hop, same pattern as the app-activation
 observer.** `NSEvent` monitor closures fire on the main run loop but aren't
@@ -628,24 +635,245 @@ hop via `Task { @MainActor in ... }` into one shared method,
 `handleSwitchKeyEvent(type:modifiers:)` — mirroring exactly how
 `bootstrap()`'s `NSWorkspace.didActivateApplicationNotification` observer
 already extracts a bundle ID before hopping actors. That method feeds
-`switchDetector` and calls `enabled.toggle()` on a fired chord.
-
-**`.off` disables it; default stays `.controlShift`.** `SwitchKeyModifier`
-gained an `.off` case (label "Tắt") so the picker can turn the hot key off
-entirely — `.off.chord` is `nil`, and `SwitchKeyDetector.flagsChanged`
-treats a `nil`/empty target as always-disabled (resets its state, always
-returns `false`). `.controlShift` remains the default, matching OpenKey and
-the easy V/E switching the design calls for.
+`switchDetector` and, on a fired chord, calls `toggleVietnameseFromHotKey()`
+(`enabled.toggle()`, plus `NSSound.beep()` iff `switchKeyBeep`).
 
 **Integration-only, not unit-testable headless.** Same reasoning as the tap
 and the `NSWorkspace` smart-switch wiring above: the live `NSEvent` monitors
 need a real running app and real system input events to exercise. Only the
-pure `SwitchKeyDetector` state machine is unit-tested; the monitor wiring in
-`AppModel` is verified by `swift build` staying clean and the existing
-engine/input suites staying green. The two `NSEvent` monitor closures run on
-the main thread and are handled **synchronously** (`MainActor.assumeIsolated`,
-not a `Task` hop) so the detector — an ordered state machine — never sees a
+pure `SwitchKeyDetector`/`SwitchHotKey` types are unit-tested; the monitor
+wiring in `AppModel` and the Carbon registrar in `App/
+SwitchHotKeyRegistrar.swift` are verified by `swift build` staying clean and
+the existing engine/input suites staying green — no fabricated unit tests
+were added for either. The two `NSEvent` monitor closures run on the main
+thread and are handled **synchronously** (`MainActor.assumeIsolated`, not a
+`Task` hop) so the detector — an ordered state machine — never sees a
 cancelling `keyDown` reordered after the releasing `flagsChanged`.
+
+### Custom combos: any modifiers, optional key (Phase 7)
+
+The Phase 4 picker only ever offered four fixed chords
+(`SwitchKeyModifier`: ⌃⇧/⌥⇧/⌘⇧/⌃⌥, or off). Phase 7 replaces it with a
+recordable `SwitchHotKey` (`Sources/KeystoneInput/SwitchHotKey.swift`, pure —
+no AppKit/Carbon): any combination of ⌃⌥⇧⌘, optionally plus one key captured
+from a real keystroke (`SwitchHotKey.Key { keyCode, label }`).
+`AppModel.switchHotKey`/`switchKeyEnabled`/`switchKeyBeep` replace the old
+`switchKeyModifier` property; `SwitchKeyModifier` itself is gone.
+
+**Why a key needs a second, different mechanism (Carbon, not the
+detector).** `SwitchKeyDetector` only ever recognizes a chord going back to
+*empty* — it has no notion of "this modifier combo plus THIS key was
+pressed", and rightly so: teaching it that would put a second key-comparison
+path next to the tap-adjacent modifier bookkeeping, in a type whose whole
+value is being small and provably correct. So a modifier+key combo
+(`switchHotKey.key != nil`) takes an entirely different, OS-level route
+instead: Carbon's `RegisterEventHotKey` (`App/SwitchHotKeyRegistrar.swift`),
+which — same as the Spotlight/screenshot hot keys — lets the OS consume the
+key outright before it reaches any app, needs no Accessibility permission of
+its own, and stays off the CGEventTap exactly like the modifier-only path.
+`AppModel.applySwitchHotKeyRegistration()` is the single place that decides
+which mechanism is live: modifier-only → `switchDetector.target` set,
+registrar unregistered; modifier+key → registrar registered, detector target
+`nil`; disabled → both torn down.
+
+**Why Shift-only+key is rejected.** `KeyTranslator.decide` (see its header)
+only treats command/control/option as hotkey-shaped
+(`.resetPassthrough`) — a Shift+key combo is ordinary typing that the engine
+still processes (Shift is how capital letters and most punctuation are
+typed). Registering e.g. Shift+F as a system-wide hot key would silently eat
+every Shift-F keystroke everywhere, including inside Keystone's own composing
+logic. `SwitchHotKey.validationError` rejects any combo with a key attached
+whose modifiers don't include at least one of ⌃⌥⌘; a modifier-ONLY chord may
+still be Shift-inclusive (⌃⇧ is the long-standing default) since there's no
+key for Shift to type. `SwitchHotKey.validationError` also rejects zero
+modifiers outright (a bare key isn't a hot key).
+
+**Disabled is checked BEFORE validation.** `applySwitchHotKeyRegistration()`
+checks `switchKeyEnabled` first and tears both mechanisms down immediately if
+it's off — before ever looking at `switchHotKey.validationError`. Checking
+validation first (the original Phase 7 order) had a real bug: unchecking
+every modifier mid-edit leaves an invalid draft, and the modifier
+checkboxes/recorder are `.disabled(!switchKeyEnabled)`, so the ONLY way to
+back out is to turn "Bật phím chuyển" off — but the validation-error early
+return came first and skipped the teardown, leaving the last valid combo
+(possibly a bare single modifier, reachable since Phase 7 allows one) still
+live and still toggling Vietnamese while the UI showed the feature off, with
+no way to fix it short of re-enabling. `switchKeyEnabled` must always win.
+
+**Invalid combos are never applied while enabled.** Past the
+`switchKeyEnabled` guard, `applySwitchHotKeyRegistration()` checks
+`switchHotKey.validationError` and returns immediately if it's non-nil,
+leaving whichever mechanism (and `appliedSwitchHotKey`, below) was last
+successfully applied still running — an in-progress bad edit in the Control
+Panel (e.g. unchecking every modifier while deciding what to record next)
+never drops a working hot key. The reason surfaces via
+`AppModel.switchKeyError` (the Control Panel's red caption) either way.
+
+**`appliedSwitchHotKey` — what's live, separate from the draft being
+edited.** `switchHotKey` is the Control Panel's in-progress draft and may be
+temporarily invalid or (for a key combo) fail to register; showing it
+verbatim in the "Tổ hợp hiện tại" caption would make an actually-still-live
+hot key look unset the moment the draft goes bad. `AppModel
+.appliedSwitchHotKey` is a separate `private(set)` property, updated ONLY on
+`applySwitchHotKeyRegistration()`'s two success paths (and cleared to `nil`
+when disabled) — that's what the caption reads.
+
+**`RegisterEventHotKey` failures are logged AND surfaced, never swallowed.**
+An OSStatus failure (most commonly `eventHotKeyExistsErr` — the combo is
+already claimed by the system or another app) is logged via `NSLog`-style
+`Logger` with the OSStatus and the combo's display string, and turned into
+the Vietnamese caption "Tổ hợp này đang được hệ thống hoặc app khác dùng".
+`SwitchHotKeyRegistrar.register` registers the NEW combo first and only
+unregisters the OLD one once that succeeds, so a failed change leaves the
+previous, still-valid registration live instead of leaving nothing
+registered — the same "keep the last valid one active" behavior as the
+validation-error case above, extended to OS-level conflicts. `AppModel`
+mirrors this ordering on its own side too: it only clears
+`switchDetector.target` (the modifier-only mechanism) AFTER
+`hotKeyRegistrar.register` succeeds, so switching from a live modifier-only
+chord to a key combo that fails to register leaves the modifier-only chord
+running instead of dropping to nothing.
+
+**Re-registering the SAME combo is a no-op, not a false "already in use."**
+`didSet` fires even when a property is set to a value equal to its current
+one (re-recording the same key, or unchecking then re-checking a modifier
+back to the combo that's already live), which would otherwise call
+`hotKeyRegistrar.register` for the exact `(modifiers, keyCode)` pair
+`hotKeyRef` already holds — and Carbon rejects that as
+`eventHotKeyExistsErr`, indistinguishable from a real conflict with another
+app. `SwitchHotKeyRegistrar` now remembers the currently-registered pair and
+treats a repeat as a successful no-op instead of calling
+`RegisterEventHotKey` again.
+
+**`InstallEventHandler` failing is surfaced too, not just logged.** If the
+Carbon event handler fails to install (`init`, effectively unreachable in
+practice), `RegisterEventHotKey` itself doesn't depend on that handler and
+would otherwise still succeed — silently claiming the combo system-wide with
+nothing to ever deliver it to, the language never toggling and no error
+shown, which is exactly the silent-failure shape this project's rules forbid.
+`SwitchHotKeyRegistrar` now tracks `handlerInstalled` and `register()` throws
+(the same `RegistrationError` path, so it surfaces the same way) while it's
+false.
+
+**Recording a key: a local monitor that consumes exactly one keyDown, scoped
+to the Control Panel's own window, with the engine suspended.** The "Phím
+kèm:" button in `BasicPane` (`App/ControlPanel.swift`) arms a
+`NSEvent.addLocalMonitorForEvents(matching: [.keyDown])`. A LOCAL monitor is
+app-wide, not window-scoped, so the handler itself filters to `event.window
+=== recordingWindow` (captured as `NSApp.keyWindow` when recording starts)
+and passes any OTHER window's keyDown straight through — otherwise a keyDown
+typed into a different Keystone window (e.g. "Chuyển mã"/"Gõ tắt", opened
+while the Control Panel is merely still in the view hierarchy behind it, so
+`.onDisappear` never fires) would be swallowed and recorded as the hot key
+instead of reaching that window's text field. A matching keyDown returns
+`nil` — consuming it so it never reaches the Control Panel window itself —
+then immediately removes the monitor. Escape (keyCode 53) cancels recording
+without storing a key, exactly like any modal recorder; any other key is
+stored as `SwitchHotKey.Key(keyCode:label:)`, with the label from
+`SwitchHotKey.keyLabel(forKeyCode:characters:)` fed
+`event.charactersIgnoringModifiers` (NOT `.characters` — held modifiers
+already transform that string, e.g. ⌥Z → "Ω", ⌃Z → an invisible control
+character), and `keyLabel`'s fallback branch itself strips control
+characters and AppKit's private-use "function key" range (U+F700–U+F8FF —
+how `NSEvent.characters`/`charactersIgnoringModifiers` spell Home/End/
+PageUp/PageDown/Forward-Delete/F13+ when the keyCode isn't one of the named
+cases) before falling back further to "Key N". `.onDisappear` on the pane
+tears the monitor down too, so navigating away mid-recording can't leave it
+consuming keys forever.
+
+`AppModel.beginSwitchKeyRecording()`/`endSwitchKeyRecording()` bracket the
+whole recording: they call `EngineController.setActive(false)`/`setActive
+(enabled)` directly — bypassing `AppModel.enabled` itself, so the persisted
+user-facing toggle is untouched — for the recorder's one-keystroke window.
+This is necessary, not cosmetic: with the engine active (the default, and
+Vietnamese being ON is the common case), a plain character key is
+unconditionally suppressed by `EngineController.handle` and re-synthesized on
+a BRAND NEW `CGEvent` with `virtualKey 0` (`TapSink.postText`) carrying
+whatever the engine transformed the key into as its Unicode string. The local
+monitor would then see only that synthetic event — keyCode 0 (registering as
+⌘⌥A on a US layout, not the key the user pressed) and a label derived from
+the engine's OUTPUT (Telex "w"→"Ư", a cancelled tone mark→a different letter,
+etc.), not the physical key at all. Suspending the engine makes every key
+pass through untouched for that one keystroke, so the recorder always sees
+the real keyCode and characters.
+
+**Legacy migration, resolved independently from `switchKeyEnabled`.**
+`SwitchHotKey.migrateLegacy(rawValue:)` is a pure function from the retired
+`SwitchKeyModifier` raw string (`"controlShift"`/`"optionShift"`/
+`"commandShift"`/`"controlOption"`/`"off"`/missing/unknown) to `(SwitchHotKey,
+isEnabled)`. `"off"` keeps ⌃⇧ as the stored combo but starts disabled — so
+turning "Bật phím chuyển" back on needs no reconfiguration — and a missing or
+unrecognized raw value falls back to today's default, ⌃⇧ enabled.
+`AppModel.loadSwitchHotKeyState()` resolves the combo and the enabled flag
+SEPARATELY rather than as one bundled migration result: the combo prefers the
+NEW `Keys.switchHotKey` JSON (falling back to the legacy migration's combo
+only if that key is absent or fails to decode to a *valid* combo), and
+`isEnabled` prefers `Keys.switchKeyEnabled` WHENEVER THAT KEY HAS EVER BEEN
+WRITTEN (`UserDefaults.object(forKey:)`, so a stored `false` isn't confused
+with "never written"), falling back to the legacy migration's `isEnabled`
+only when it's truly absent. The two used to be coupled — the migration
+branch returned its own `isEnabled` unconditionally — which meant a user who
+only ever flipped "Bật phím chuyển" (and never touched the combo, so
+`Keys.switchHotKey` stayed unwritten) had that on/off choice silently
+discarded on every relaunch, in BOTH directions (turning it off and losing
+that on relaunch; turning a legacy-"off" combo on and losing that too). The
+legacy key is read-only from here on — nothing writes
+`Keys.switchKeyModifierLegacy` anymore.
+
+**`switchHotKey` is persisted ONLY when actually applied, never as a raw
+draft.** The property's `didSet` used to call `AppModel.saveSwitchHotKey`
+unconditionally, before validation — so every intermediate state while
+editing (unchecking a modifier down to an invalid set, recording a key that
+then fails to register against another app) got written to UserDefaults,
+and a quit mid-edit would persist a combo that `loadSwitchHotKeyState()` then
+rejects on the next launch, falling all the way back to the legacy migration
+and silently discarding the user's actual last-good combo (and, compounding
+the bug above, potentially their enabled/disabled choice too). Persistence
+now happens ONLY inside `applySwitchHotKeyRegistration()`'s two success
+paths — modifier-only (always succeeds once valid) and a Carbon-registered
+key combo — the same places that update `appliedSwitchHotKey`. An invalid
+draft, or a key combo that fails to register, changes neither.
+
+**`switchKeyBeep`, default off.** "Kêu bíp khi chuyển" is a plain opt-in
+`NSSound.beep()` on every successful toggle (both firing paths share
+`toggleVietnameseFromHotKey()`), independent of which combo is configured.
+
+### Hardening arbitrary modifier targets (Phase 7.1)
+
+Phase 7's `SwitchHotKey` lets the modifier-only chord be ANY non-empty
+`ModifierSet`, including a single modifier (⇧, ⌥, or ⌘ alone) — the old fixed
+`SwitchKeyModifier` enum only ever offered two-or-more-modifier chords, which
+happened to make two classes of bug unreachable. Independent review surfaced
+both once single modifiers became legal:
+
+**A target that's a SUBSET of a larger held chord must not re-arm on the way
+down.** `SwitchKeyDetector.flagsChanged` used to arm whenever `active ==
+target`, full stop — with target=`[.shift]`, holding ⌘⇧Z (Redo) and releasing
+⌘ FIRST leaves `active == [.shift] == target`, which looked exactly like a
+fresh clean press, and releasing ⇧ next then fired a spurious toggle. The
+same shape hits target=`[.command]` with ⌘⇧S, or even the long-standing
+default ⌃⇧ via ⌃⌥⇧+key with ⌥ released first. The detector now tracks a
+`dirty` flag: any modifier outside `target`, or any real key
+(`otherKeyPressed()`), taints the WHOLE hold, not just the moment it happens
+— `dirty` only clears when `active` goes fully empty (a real release), so
+`active` re-equaling `target` later in the same hold never arms. Pinned by
+`SwitchKeyDetectorTests.targetSubsetOfHeldChordDoesNotFireOnCommandReleasedFirst`
+and
+`.defaultTargetDoesNotFireWhenOptionReleasedFirstFromThreeModifierChord`.
+
+**A modifier-click must cancel an armed chord too, not just a keyDown.** The
+`NSEvent` monitors in `AppModel.installSwitchKeyMonitors()` used to watch
+only `[.flagsChanged, .keyDown]`. With a two-or-more-modifier default, a
+click while holding one of its modifiers was rare enough not to matter; with
+a single modifier now legal, shift-click (extend a selection), ⌘-click (open
+in new tab, multi-select), and ⌥-click are everyday gestures that would each
+spuriously toggle Vietnamese on release. The monitors now also watch
+`[.leftMouseDown, .rightMouseDown, .otherMouseDown]` and route them into
+`switchDetector.otherKeyPressed()` exactly like a keyDown (see
+`AppModel.switchKeyMonitoredEvents`/`handleSwitchKeyEvent`). This is
+integration-only, same reasoning as the rest of the monitor wiring below —
+verified by `swift build` staying clean and the existing suites staying
+green, not a fabricated unit test.
 
 ## Menu-bar mode indicator (V / E)
 
